@@ -94,20 +94,27 @@ html.cinematic-page.has-cinematic-cursor button {
 
 /* ── progress rail ───────────────────────────────────────────────────────── */
 
+/* Scroll wayfinding for a thirteen-beat narrative — but NOT in the hero.
+   Stacked down the right edge it reads as a dashed vertical rule, which is
+   the look the hero is supposed to be free of. It fades in once the reader
+   starts moving and is invisible on the first screen, so the opening frame
+   is nothing but type, coin and atmosphere. Opacity is driven by scroll in
+   narrative.tsx. */
 .cinematic .progress-rail {
   position: fixed;
-  right: 40px;
+  right: 34px;
   top: 50%;
   transform: translate(50%, -50%);
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 6px;
   z-index: 6;
+  transition: opacity 0.7s var(--ease-soft);
 }
 .cinematic .progress-dash {
   width: 2px;
-  height: 22px;
-  background: rgba(255, 255, 255, 0.14);
+  height: 16px;
+  background: rgba(255, 255, 255, 0.1);
   border-radius: 2px;
   overflow: hidden;
 }
@@ -1024,8 +1031,10 @@ html.cinematic-page.has-cinematic-cursor button {
   align-items: flex-end;
   justify-content: space-between;
   gap: 24px;
+  /* NO border-bottom. It spanned left:60 to right:60, which is a hairline
+     across the full viewport — the same thing the guide grid was removed for.
+     The lockup and the copyright hold the foot of the frame on their own. */
   padding-bottom: 14px;
-  border-bottom: 1px solid var(--line);
   z-index: 14;
   pointer-events: none;
 }
@@ -1041,7 +1050,9 @@ html.cinematic-page.has-cinematic-cursor button {
 .cinematic .footer-indic {
   font-family: var(--font-noto-devanagari), sans-serif;
   font-size: 14px;
-  color: var(--ink-faint);
+  /* Same colour as the Latin half. The two words are one lockup — colouring
+     only the Devanagari made it read as a tag rather than as the name. */
+  color: var(--ink);
 }
 .cinematic .footer-copy { font-size: 11.5px; color: var(--ink-ghost); }
 
@@ -1062,8 +1073,11 @@ html.cinematic-page.has-cinematic-cursor button {
   font-weight: 600;
   letter-spacing: -0.035em;
   line-height: 0.78;
-  color: #fff;
-  opacity: 0.9;
+  /* Champagne, not white — it picks up the brass of the coin and stops the
+     wordmark from competing with the headline for the brightest thing on
+     screen. */
+  color: #cdbfa6;
+  opacity: 0.92;
   white-space: nowrap;
 }
 

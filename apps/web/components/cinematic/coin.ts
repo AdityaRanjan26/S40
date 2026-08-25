@@ -127,8 +127,19 @@ function drawRim(ctx: CanvasRenderingContext2D) {
 }
 
 /**
- * The Lion Capital of Ashoka, stylised: three visible lions (one facing, two in
- * profile) standing on the abacus, with the Dharma Chakra centred beneath them.
+ * The Lion Capital of Ashoka — the State Emblem, as struck on the coin's
+ * obverse.
+ *
+ * Three of the four lions are visible: one facing the viewer, two in profile
+ * either side. They stand on a circular abacus carrying the Dharma Chakra,
+ * which sits on an inverted bell-shaped lotus.
+ *
+ * The earlier pass drew the lions as soft blobs — a rounded body with a
+ * circle for a head — which read as a bear or a sheep, not a lion. What makes
+ * a lion legible at this size is the MANE: a wide, deeply-notched collar much
+ * broader than the skull, with the muzzle set low inside it. That, the square
+ * shoulders and the straight forelegs are what the shape needs, far more than
+ * fine detail that vanishes at coin scale.
  */
 function drawLionCapital(
   ctx: CanvasRenderingContext2D,
@@ -138,123 +149,174 @@ function drawLionCapital(
 ) {
   ctx.save()
   ctx.translate(cx, cy)
-  ctx.fillStyle = RAISED
-  ctx.strokeStyle = RAISED
   ctx.lineJoin = "round"
   ctx.lineCap = "round"
+  ctx.fillStyle = RAISED
+  ctx.strokeStyle = RAISED
 
-  /* -- abacus: the band the lions stand on ------------------------------- */
+  /* ── the bell/lotus base ─────────────────────────────────────────────── */
+  ctx.fillStyle = RAISED_SOFT
   ctx.beginPath()
-  ctx.moveTo(-s * 0.62, s * 0.30)
-  ctx.lineTo(s * 0.62, s * 0.30)
-  ctx.lineTo(s * 0.55, s * 0.46)
-  ctx.lineTo(-s * 0.55, s * 0.46)
+  ctx.moveTo(-s * 0.46, s * 0.52)
+  ctx.bezierCurveTo(-s * 0.34, s * 0.74, -s * 0.26, s * 0.86, -s * 0.22, s * 0.94)
+  ctx.lineTo(s * 0.22, s * 0.94)
+  ctx.bezierCurveTo(s * 0.26, s * 0.86, s * 0.34, s * 0.74, s * 0.46, s * 0.52)
+  ctx.closePath()
+  ctx.fill()
+  // Lotus petal flutes.
+  ctx.strokeStyle = RECESSED
+  ctx.lineWidth = s * 0.016
+  for (let i = -3; i <= 3; i++) {
+    ctx.beginPath()
+    ctx.moveTo(i * s * 0.115, s * 0.56)
+    ctx.lineTo(i * s * 0.062, s * 0.92)
+    ctx.stroke()
+  }
+
+  /* ── the abacus ──────────────────────────────────────────────────────── */
+  ctx.fillStyle = RAISED
+  ctx.beginPath()
+  ctx.moveTo(-s * 0.58, s * 0.26)
+  ctx.lineTo(s * 0.58, s * 0.26)
+  ctx.lineTo(s * 0.50, s * 0.52)
+  ctx.lineTo(-s * 0.50, s * 0.52)
   ctx.closePath()
   ctx.fill()
 
-  /* -- Dharma Chakra on the abacus --------------------------------------- */
+  /* ── Dharma Chakra, centred on the abacus ────────────────────────────── */
   ctx.save()
-  ctx.translate(0, s * 0.38)
+  ctx.translate(0, s * 0.39)
   ctx.strokeStyle = RECESSED
-  ctx.lineWidth = s * 0.022
+  ctx.lineWidth = s * 0.020
   ctx.beginPath()
-  ctx.arc(0, 0, s * 0.115, 0, Math.PI * 2)
+  ctx.arc(0, 0, s * 0.105, 0, Math.PI * 2)
   ctx.stroke()
-  ctx.lineWidth = s * 0.012
+  ctx.lineWidth = s * 0.011
   for (let i = 0; i < 24; i++) {
     const a = (i / 24) * Math.PI * 2
     ctx.beginPath()
-    ctx.moveTo(Math.cos(a) * s * 0.028, Math.sin(a) * s * 0.028)
-    ctx.lineTo(Math.cos(a) * s * 0.105, Math.sin(a) * s * 0.105)
+    ctx.moveTo(Math.cos(a) * s * 0.026, Math.sin(a) * s * 0.026)
+    ctx.lineTo(Math.cos(a) * s * 0.096, Math.sin(a) * s * 0.096)
     ctx.stroke()
   }
-  ctx.beginPath()
-  ctx.arc(0, 0, s * 0.026, 0, Math.PI * 2)
   ctx.fillStyle = RECESSED
+  ctx.beginPath()
+  ctx.arc(0, 0, s * 0.024, 0, Math.PI * 2)
   ctx.fill()
   ctx.restore()
 
-  /* -- bell/lotus base beneath the abacus -------------------------------- */
-  ctx.fillStyle = RAISED_SOFT
-  ctx.beginPath()
-  ctx.moveTo(-s * 0.5, s * 0.46)
-  ctx.quadraticCurveTo(-s * 0.30, s * 0.70, -s * 0.20, s * 0.78)
-  ctx.lineTo(s * 0.20, s * 0.78)
-  ctx.quadraticCurveTo(s * 0.30, s * 0.70, s * 0.5, s * 0.46)
-  ctx.closePath()
-  ctx.fill()
-
-  /* -- lion bodies -------------------------------------------------------- */
-  ctx.fillStyle = RAISED
-
-  // Side lions, in profile, facing outward.
-  const sideLion = (dir: number) => {
+  /* ── the two profile lions ───────────────────────────────────────────── */
+  const profileLion = (dir: number) => {
     ctx.save()
     ctx.scale(dir, 1)
-    // haunch and back
+    ctx.fillStyle = RAISED
+
+    // Body: square shoulder, level back, haunch down to the abacus.
     ctx.beginPath()
-    ctx.moveTo(s * 0.14, s * 0.30)
-    ctx.quadraticCurveTo(s * 0.52, s * 0.26, s * 0.56, s * 0.02)
-    ctx.quadraticCurveTo(s * 0.58, -s * 0.18, s * 0.44, -s * 0.26)
-    ctx.quadraticCurveTo(s * 0.30, -s * 0.32, s * 0.20, -s * 0.20)
-    ctx.quadraticCurveTo(s * 0.16, s * 0.02, s * 0.14, s * 0.30)
+    ctx.moveTo(s * 0.15, s * 0.26)
+    ctx.lineTo(s * 0.15, -s * 0.10)
+    ctx.quadraticCurveTo(s * 0.20, -s * 0.30, s * 0.36, -s * 0.34)
+    ctx.quadraticCurveTo(s * 0.54, -s * 0.36, s * 0.58, -s * 0.16)
+    ctx.quadraticCurveTo(s * 0.61, s * 0.06, s * 0.55, s * 0.26)
     ctx.closePath()
     ctx.fill()
-    // foreleg
-    ctx.lineWidth = s * 0.075
+
+    // Foreleg, straight and vertical, as on the capital.
+    ctx.lineWidth = s * 0.072
     ctx.beginPath()
-    ctx.moveTo(s * 0.46, -s * 0.06)
-    ctx.lineTo(s * 0.50, s * 0.28)
+    ctx.moveTo(s * 0.50, -s * 0.06)
+    ctx.lineTo(s * 0.52, s * 0.24)
     ctx.stroke()
-    // muzzle
+
+    // Mane: a broad notched collar, wider than the skull.
     ctx.beginPath()
-    ctx.moveTo(s * 0.50, -s * 0.24)
-    ctx.quadraticCurveTo(s * 0.62, -s * 0.26, s * 0.60, -s * 0.14)
-    ctx.quadraticCurveTo(s * 0.54, -s * 0.12, s * 0.50, -s * 0.16)
+    ctx.ellipse(s * 0.44, -s * 0.30, s * 0.19, s * 0.17, 0.12, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.lineWidth = s * 0.026
+    for (let i = 0; i < 9; i++) {
+      const a = -Math.PI * 0.15 + (i / 8) * Math.PI * 1.25
+      ctx.beginPath()
+      ctx.moveTo(s * 0.44 + Math.cos(a) * s * 0.15, -s * 0.30 + Math.sin(a) * s * 0.14)
+      ctx.lineTo(s * 0.44 + Math.cos(a) * s * 0.235, -s * 0.30 + Math.sin(a) * s * 0.215)
+      ctx.stroke()
+    }
+
+    // Muzzle, set low and forward inside the mane.
+    ctx.beginPath()
+    ctx.moveTo(s * 0.52, -s * 0.36)
+    ctx.quadraticCurveTo(s * 0.68, -s * 0.34, s * 0.66, -s * 0.21)
+    ctx.quadraticCurveTo(s * 0.58, -s * 0.17, s * 0.51, -s * 0.22)
     ctx.closePath()
+    ctx.fill()
+    ctx.fillStyle = RECESSED
+    ctx.beginPath()
+    ctx.ellipse(s * 0.61, -s * 0.30, s * 0.019, s * 0.014, 0, 0, Math.PI * 2)
     ctx.fill()
     ctx.restore()
   }
-  sideLion(1)
-  sideLion(-1)
+  profileLion(1)
+  profileLion(-1)
 
-  // Centre lion, facing the viewer.
+  /* ── the facing lion ─────────────────────────────────────────────────── */
+  ctx.fillStyle = RAISED
+  // Chest and shoulders.
   ctx.beginPath()
-  ctx.moveTo(-s * 0.19, s * 0.30)
-  ctx.quadraticCurveTo(-s * 0.23, -s * 0.06, -s * 0.15, -s * 0.20)
-  ctx.lineTo(s * 0.15, -s * 0.20)
-  ctx.quadraticCurveTo(s * 0.23, -s * 0.06, s * 0.19, s * 0.30)
+  ctx.moveTo(-s * 0.21, s * 0.26)
+  ctx.quadraticCurveTo(-s * 0.25, -s * 0.02, -s * 0.17, -s * 0.16)
+  ctx.lineTo(s * 0.17, -s * 0.16)
+  ctx.quadraticCurveTo(s * 0.25, -s * 0.02, s * 0.21, s * 0.26)
   ctx.closePath()
   ctx.fill()
+  // Forelegs.
+  ctx.lineWidth = s * 0.062
+  ctx.beginPath()
+  ctx.moveTo(-s * 0.11, s * 0.02)
+  ctx.lineTo(-s * 0.13, s * 0.24)
+  ctx.moveTo(s * 0.11, s * 0.02)
+  ctx.lineTo(s * 0.13, s * 0.24)
+  ctx.stroke()
 
-  // Mane — a ring of short radiating strokes around the centre head.
-  ctx.strokeStyle = RAISED
+  // Mane: the widest element of the whole emblem.
+  ctx.beginPath()
+  ctx.ellipse(0, -s * 0.30, s * 0.235, s * 0.205, 0, 0, Math.PI * 2)
+  ctx.fill()
   ctx.lineWidth = s * 0.030
-  for (let i = 0; i < 22; i++) {
-    const a = Math.PI + (i / 21) * Math.PI
-    const r0 = s * 0.145
-    const r1 = s * 0.215
+  for (let i = 0; i < 20; i++) {
+    const a = (i / 19) * Math.PI * 2
+    const r0x = s * 0.20, r0y = s * 0.175
+    const r1x = s * 0.295, r1y = s * 0.265
     ctx.beginPath()
-    ctx.moveTo(Math.cos(a) * r0, -s * 0.30 + Math.sin(a) * r0 * 0.9)
-    ctx.lineTo(Math.cos(a) * r1, -s * 0.30 + Math.sin(a) * r1 * 0.9)
+    ctx.moveTo(Math.cos(a) * r0x, -s * 0.30 + Math.sin(a) * r0y)
+    ctx.lineTo(Math.cos(a) * r1x, -s * 0.30 + Math.sin(a) * r1y)
     ctx.stroke()
   }
 
-  // Centre head + face.
-  ctx.fillStyle = RAISED
+  // Face: muzzle box, eyes, nose.
   ctx.beginPath()
-  ctx.ellipse(0, -s * 0.30, s * 0.145, s * 0.135, 0, 0, Math.PI * 2)
+  ctx.ellipse(0, -s * 0.26, s * 0.115, s * 0.098, 0, 0, Math.PI * 2)
   ctx.fill()
   ctx.fillStyle = RECESSED
   ctx.beginPath()
-  ctx.ellipse(-s * 0.052, -s * 0.325, s * 0.020, s * 0.014, 0, 0, Math.PI * 2)
+  ctx.ellipse(-s * 0.062, -s * 0.345, s * 0.022, s * 0.016, 0, 0, Math.PI * 2)
   ctx.fill()
   ctx.beginPath()
-  ctx.ellipse(s * 0.052, -s * 0.325, s * 0.020, s * 0.014, 0, 0, Math.PI * 2)
+  ctx.ellipse(s * 0.062, -s * 0.345, s * 0.022, s * 0.016, 0, 0, Math.PI * 2)
   ctx.fill()
   ctx.beginPath()
-  ctx.ellipse(0, -s * 0.255, s * 0.030, s * 0.020, 0, 0, Math.PI * 2)
+  ctx.moveTo(-s * 0.030, -s * 0.275)
+  ctx.lineTo(s * 0.030, -s * 0.275)
+  ctx.lineTo(0, -s * 0.232)
+  ctx.closePath()
   ctx.fill()
+  // Mouth.
+  ctx.strokeStyle = RECESSED
+  ctx.lineWidth = s * 0.014
+  ctx.beginPath()
+  ctx.moveTo(0, -s * 0.232)
+  ctx.lineTo(0, -s * 0.205)
+  ctx.moveTo(-s * 0.048, -s * 0.196)
+  ctx.quadraticCurveTo(0, -s * 0.172, s * 0.048, -s * 0.196)
+  ctx.stroke()
 
   ctx.restore()
 }
@@ -304,7 +366,15 @@ function arcText(
   centerAngle: number,
   spacing = 1
 ) {
-  const chars = [...text]
+  // Devanagari must be segmented by GRAPHEME, not by code point. `[...text]`
+  // splits र + ु + प + य + ा into five independent glyphs, so the vowel signs
+  // detach from their consonants and रुपया renders as broken shapes. Grapheme
+  // clusters keep each syllable intact and correctly shaped.
+  const chars =
+    typeof Intl !== "undefined" && "Segmenter" in Intl
+      ? [...new Intl.Segmenter("hi", { granularity: "grapheme" }).segment(text)]
+          .map((g) => g.segment)
+      : [...text]
   const widths = chars.map((ch) => ctx.measureText(ch).width * spacing)
   const total = widths.reduce((t, w) => t + w, 0)
   // Arc length -> angle.
@@ -366,14 +436,14 @@ function drawNumeralOne(
 }
 
 /**
- * One side of the wheat motif: two long tapering leaves on the outside and a
- * chevron-grained ear between them.
+ * One side of the wheat motif: two long curved blades on the outside, and a
+ * grain ear of overlapping teardrop kernels between them.
  *
- * This is the detail that carries the coin's identity, and the first two
- * attempts under-drew it — a bare stem with ellipses stuck to it, which read
- * as a laurel sprig or a fern. On the coin the leaves are broad blades that
- * sweep nearly the full height of the numeral, and the grains are stacked
- * chevrons, not beads.
+ * The grains are TEARDROPS, not chevrons. Two earlier passes drew them as
+ * V-strokes stepping up a stem, which renders as a fir tree — and once you
+ * see the fir you cannot unsee it. On the coin each kernel is a plump, blunt
+ * lozenge lying at a shallow angle, overlapping its neighbour, with the ear
+ * fattest at the middle and tapering to a point.
  */
 function drawWheat(
   ctx: CanvasRenderingContext2D,
@@ -385,12 +455,12 @@ function drawWheat(
   ctx.save()
   ctx.translate(cx, cy)
   ctx.scale(dir, 1)
-  ctx.strokeStyle = RAISED
   ctx.fillStyle = RAISED
+  ctx.strokeStyle = RAISED
   ctx.lineCap = "round"
   ctx.lineJoin = "round"
 
-  // Two long outer blades, the outer one broader and reaching higher.
+  // Two long outer blades, sweeping out and up like leaves off the stalk.
   const blade = (
     x0: number, y0: number, x1: number, y1: number,
     bow: number, width: number
@@ -402,34 +472,42 @@ function drawWheat(
     ctx.closePath()
     ctx.fill()
   }
-  blade(s * 0.10, s * 0.52, s * 0.42, -s * 0.34, s * 0.34, s * 0.085)
-  blade(s * 0.05, s * 0.54, s * 0.20, -s * 0.10, s * 0.30, s * 0.062)
+  blade(s * 0.06, s * 0.56, s * 0.52, -s * 0.40, s * 0.44, s * 0.10)
+  blade(s * 0.02, s * 0.58, s * 0.30, -s * 0.06, s * 0.40, s * 0.075)
 
-  // The ear: a slim stem with chevron grains stepping up it.
-  ctx.lineWidth = s * 0.030
+  // The stalk.
+  ctx.lineWidth = s * 0.036
   ctx.beginPath()
-  ctx.moveTo(s * 0.02, s * 0.50)
-  ctx.quadraticCurveTo(s * 0.10, s * 0.10, s * 0.13, -s * 0.42)
+  ctx.moveTo(-s * 0.02, s * 0.56)
+  ctx.quadraticCurveTo(s * 0.06, s * 0.12, s * 0.10, -s * 0.44)
   ctx.stroke()
 
-  const grains = 7
-  ctx.lineWidth = s * 0.034
-  for (let i = 0; i < grains; i++) {
-    const t = i / (grains - 1)
-    const x = s * 0.02 + (s * 0.08) * (2 * t * (1 - t)) + (s * 0.11) * t * t
-    const y = s * 0.50 - t * s * 0.92
-    const k = 1 - t * 0.4
-    // A chevron opening downward, one arm either side of the stem.
-    ctx.beginPath()
-    ctx.moveTo(x - s * 0.17 * k, y + s * 0.10 * k)
-    ctx.lineTo(x, y - s * 0.03 * k)
-    ctx.lineTo(x + s * 0.17 * k, y + s * 0.10 * k)
-    ctx.stroke()
+  // Kernels: plump lozenges in opposed pairs, overlapping up the stalk.
+  const rows = 6
+  for (let i = 0; i < rows; i++) {
+    const t = i / (rows - 1)
+    const x = -s * 0.02 + s * 0.12 * t
+    const y = s * 0.44 - t * s * 0.80
+    // Fattest through the middle of the ear, tapering at both ends.
+    const k = 0.55 + 0.45 * Math.sin(Math.PI * (0.18 + t * 0.72))
+    for (const side of [-1, 1]) {
+      ctx.save()
+      ctx.translate(x + side * s * 0.075 * k, y)
+      ctx.rotate(side * -0.62)
+      ctx.beginPath()
+      ctx.ellipse(0, 0, s * 0.115 * k, s * 0.056 * k, 0, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.restore()
+    }
   }
-  // Terminal grain closing the ear.
+  // Terminal kernel closing the ear.
+  ctx.save()
+  ctx.translate(s * 0.10, -s * 0.44)
+  ctx.rotate(-0.16)
   ctx.beginPath()
-  ctx.ellipse(s * 0.13, -s * 0.47, s * 0.035, s * 0.075, -0.08, 0, Math.PI * 2)
+  ctx.ellipse(0, 0, s * 0.048, s * 0.098, 0, 0, Math.PI * 2)
   ctx.fill()
+  ctx.restore()
 
   ctx.restore()
 }
@@ -456,8 +534,8 @@ function drawDenomination(ctx: CanvasRenderingContext2D) {
   ctx.textBaseline = "middle"
 
   // रुपया, arced along the top inside the rim.
-  ctx.font = `600 ${Math.round(n * 0.082)}px "Noto Sans Devanagari", serif`
-  arcText(ctx, "रुपया", c, c, n * 0.355, -Math.PI / 2, 1.06)
+  ctx.font = `700 ${Math.round(n * 0.098)}px "Noto Sans Devanagari", serif`
+  arcText(ctx, "रुपया", c, c, n * 0.335, -Math.PI / 2, 1.04)
 
   // RUPEE and the year, on straight baselines low in the field.
   ctx.font = `400 ${Math.round(n * 0.092)}px ${SERIF}`
@@ -465,7 +543,7 @@ function drawDenomination(ctx: CanvasRenderingContext2D) {
   ctx.fillText("RUPEE", c, c + n * 0.205)
   ctx.font = `400 ${Math.round(n * 0.082)}px ${SERIF}`
   ctx.letterSpacing = `${n * 0.006}px`
-  ctx.fillText("1998", c, c + n * 0.315)
+  ctx.fillText("2000", c, c + n * 0.315)
   ctx.letterSpacing = "0px"
   ctx.restore()
 
@@ -578,6 +656,15 @@ export function createCoin(): CoinBundle {
   const edgeCanvas = newCanvas()
   drawEdge(edgeCanvas.getContext("2d")!)
 
+  // Dev-only hook so the struck faces can be inspected at full resolution
+  // without hunting for the camera angle that happens to show them.
+  if (process.env.NODE_ENV !== "production") {
+    ;(window as unknown as Record<string, unknown>).__coinFaces = {
+      front: frontCanvas,
+      back: backCanvas,
+    }
+  }
+
   const frontBump = faceTexture(frontCanvas, "obverse")
   const backBump = faceTexture(backCanvas, "reverse")
   const edgeBump = toTexture(edgeCanvas, 1)
@@ -592,7 +679,7 @@ export function createCoin(): CoinBundle {
   const base = {
     // Ferritic stainless, not silver and emphatically not gold. A touch warm
     // so it never reads as chrome, but desaturated enough to stay currency.
-    color: new THREE.Color("#c8c5bf"),
+    color: new THREE.Color("#e8e2d6"),
     metalness: 1.0,
     // Slightly under 1 keeps a little diffuse response, which is what stops
     // the coin going to a black silhouette in a room this dark.
@@ -607,17 +694,17 @@ export function createCoin(): CoinBundle {
       bumpScale: 0.009,
       roughnessMap: bump,
       // Raised relief polishes with handling; the field stays duller.
-      roughness: 0.36,
+      roughness: 0.3,
     })
 
   const materials = [
     new THREE.MeshStandardMaterial({
       ...base,
       bumpMap: edgeBump,
-      bumpScale: 0.004,
+      bumpScale: 0.012,
       // The reeded edge catches the key light across its whole length; at the
       // faces' roughness it flared into a chrome band brighter than the coin.
-      roughness: 0.58,
+      roughness: 0.34,
     }),
     faceMaterial(frontBump),
     faceMaterial(backBump),

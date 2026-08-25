@@ -377,15 +377,17 @@ function Header() {
       </nav>
       <a href="#" className="cta-pill" onClick={go(0.565)}>
         See a held payment
-        <span className="live-dot" aria-hidden />
       </a>
     </header>
   )
 }
 
 function ProgressRail({ scroll }: { scroll: number }) {
+  // Hidden on the opening frame, easing in over the first beat. The hero is
+  // the one screen that has to be completely clean.
+  const shown = Math.max(0, Math.min(1, (scroll - 0.012) / 0.045))
   return (
-    <div className="progress-rail" aria-hidden>
+    <div className="progress-rail" aria-hidden style={{ opacity: shown }}>
       {ORDER.map((key, i) => {
         const [a, b] = S[key]
         const p = Math.max(0, Math.min(1, (scroll - a) / (b - a)))
@@ -422,7 +424,6 @@ export function Narrative() {
         {/* 01 ─ HERO */}
         <Section id="top" range={S.hero} scroll={scroll}>
           <p className="eyebrow">
-            <span className="live-dot" aria-hidden />
             Real-time · before the payment completes
           </p>
           <WordReveal as="h1" className="display display--hero"
