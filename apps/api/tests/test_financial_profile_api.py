@@ -285,3 +285,34 @@ def test_model_artifact_download_for_different_user_returns_403(client):
         headers=headers_a,
     )
     assert res.status_code == 403
+
+
+def test_model_sync_authenticates_with_real_session_token_from_verify_otp(client):
+    """Regression: get_current_user was JWT-only, but every real mobile
+    session uses the OPAQUE session token /auth/verify-otp (and /login)
+    actually issue via SessionService.create_session, not a JWT — the
+    other tests in this file all mint JWTs directly via create_access_token,
+    which masked this. This goes through the real signup -> verify-otp
+    flow a live user takes and uses exactly the token that flow returns,
+    catching the auth-scheme mismatch found during manual end-to-end
+    testing (every real logged-in user got a 401 from model-sync)."""
+    from app.services.otp_service import otp_delivery_provider
+
+    phone = f"+91-98000-{_user_counter:05d}"
+    signup = client.post(
+        "/api/v1/auth/signup",
+        json={"fullName": "Real Session Flow User", "mobileNumber": phone, "password": "StrongPassword123!"},
+    )
+    assert signup.status_code in (200, 201), signup.text
+    user_id = signup.json()["userId"]
+
+    otp = otp_delivery_provider.get_last_otp_for_target(phone)
+    assert otp is not None
+    verify = client.post("/api/v1/auth/verify-otp", json={"userId": user_id, "otp": otp})
+    assert verify.status_code == 200, verify.text
+    session_token = verify.json()["token"]
+    assert not session_token.startswith("eyJ"), "expected an opaque session token, not a JWT"
+
+    res = client.get(f"/api/v1/users/{user_id}/model-sync", headers={"Authorization": f"Bearer {session_token}"})
+    assert res.status_code == 200, res.text
+    assert res.json()["has_model"] is False

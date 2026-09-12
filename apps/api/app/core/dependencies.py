@@ -13,6 +13,7 @@ from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models.user import User
 from app.repositories import user_repository
+from app.services.session_service import SessionService
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -21,7 +22,16 @@ def get_current_user(
     auth_header: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User:
-    """Extract and validate JWT Bearer token from the Authorization header.
+    """Extract and validate the Bearer token from the Authorization header.
+
+    The app issues two different token shapes depending on the auth flow:
+    a short-lived JWT from /auth/signup (decoded here directly), and an
+    opaque, DB-backed session token from /auth/verify-otp, /auth/login,
+    etc. (SessionService.create_session) — the token every real logged-in
+    mobile session actually persists and sends afterward. A JWT-only check
+    here 401s every real user, since they're never carrying a JWT past
+    their first, pre-verification request. Both are tried before failing.
+
     Returns authenticated User model or raises HTTP 401 Unauthorized.
     """
     if not auth_header or not auth_header.credentials:
@@ -32,32 +42,29 @@ def get_current_user(
         )
 
     token = auth_header.credentials
+
     try:
         payload = decode_access_token(token)
         user_id_str = payload.get("sub")
         if not user_id_str:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token claim invalid: missing subject ID.",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        user_id = int(user_id_str)
+            raise ValueError("Token claim invalid: missing subject ID.")
+        user = user_repository.get_user_by_id(db, int(user_id_str))
+        if user is not None:
+            return user
     except (JWTError, ValueError):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired access token.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        pass
 
-    user = user_repository.get_user_by_id(db, user_id)
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User associated with this token no longer exists.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    is_valid, session, _err_msg = SessionService.validate_session_token(db=db, raw_token=token)
+    if is_valid and session is not None:
+        user = user_repository.get_user_by_id(db, session.user_id)
+        if user is not None:
+            return user
 
-    return user
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired access token.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 def get_optional_current_user(
