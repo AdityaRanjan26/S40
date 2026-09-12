@@ -30,6 +30,7 @@ import {
   validateAmountInput,
 } from "../utils/recipient-type";
 import { buildRiskEvaluationPayload } from "./risk-service";
+import type { LocalRiskEstimate } from "./recipient-risk-service";
 import {
   parseUpiPaymentPayload,
   ParsedUpiPaymentData,
@@ -873,25 +874,82 @@ class CentralPaymentManager {
 
   /**
    * Deterministic offline / demo pre-payment evaluation fallback.
+   *
+   * Prefers a real signal — RecipientRiskService's on-device ONNX model —
+   * over the hardcoded amount-threshold heuristic below. The model's raw
+   * output isn't calibrated (see recipient-risk-service.ts's SCALE
+   * WARNING), so only its own "elevated vs not" verdict against its
+   * bundled threshold is used, never the raw probability as a score.
+   * Falls back to the amount heuristic when the model is unavailable
+   * (Expo Go, no native module, asset missing, etc. — estimateLocally
+   * returns null rather than throwing in all of those cases).
    */
-  public evaluatePaymentOffline(request: PaymentEvaluationRequest): PaymentEvaluationResult {
+  public async evaluatePaymentOffline(request: PaymentEvaluationRequest): Promise<PaymentEvaluationResult> {
     const raw = request.recipient.trim();
     const isUpi = raw.includes("@");
     const recType = isUpi ? "UPI_ID" : "PHONE";
-    let score = 15;
-    if (request.amount > 20000) {
-      score = 75;
-    } else if (request.amount > 5000) {
-      score = 45;
+    const normalizedRecipient = isUpi ? raw.toLowerCase() : raw.replace(/[\s\-\(\)]/g, "").replace(/^(\+91|91)/, "");
+
+    // Loaded lazily rather than as a static import: recipient-risk-service.ts
+    // pulls in expo-asset / onnxruntime-react-native at module scope, native
+    // modules that crash on load outside the RN runtime (e.g. non-RN
+    // regression scripts). estimateLocally itself already fails safe
+    // (returns null) once loaded; this guards the module load too.
+    let localEstimate: LocalRiskEstimate | null = null;
+    try {
+      const { RecipientRiskService } = require("./recipient-risk-service");
+      localEstimate = await RecipientRiskService.estimateLocally(
+        request.amount,
+        normalizedRecipient,
+        this.transactions
+      );
+    } catch {
+      localEstimate = null;
     }
-    const level: "LOW" | "MEDIUM" | "HIGH" = score > 60 ? "HIGH" : score > 30 ? "MEDIUM" : "LOW";
-    const decision = level === "HIGH" ? "CONFIRM_OR_CANCEL" : level === "MEDIUM" ? "WARN_CHOICE" : "ALLOW";
-    const reasons =
-      level === "HIGH"
-        ? ["High amount transfer deviates from normal baseline", "Unverified recipient profile"]
-        : level === "MEDIUM"
-        ? ["Moderate amount transaction", "First-time transfer to this recipient"]
-        : ["Standard verified payment signature", "Known device and location pattern"];
+
+    let score: number;
+    let level: "LOW" | "MEDIUM" | "HIGH";
+    let decision: string;
+    let reasons: string[];
+    let riskFactors: string[];
+    let riskContributionsPct: Record<string, number>;
+    let disclaimer: string;
+
+    if (localEstimate) {
+      score = localEstimate.elevated ? 70 : 20;
+      level = score > 60 ? "HIGH" : score > 30 ? "MEDIUM" : "LOW";
+      decision = level === "HIGH" ? "CONFIRM_OR_CANCEL" : level === "MEDIUM" ? "WARN_CHOICE" : "ALLOW";
+      reasons = localEstimate.elevated
+        ? [
+            "On-device model flagged this recipient/amount pattern as elevated risk",
+            localEstimate.scorable
+              ? "Based on your prior payment history to this recipient on this device"
+              : "Limited prior on-device history with this recipient",
+          ]
+        : ["On-device model found no elevated risk signal", "Consistent with your typical payment pattern"];
+      riskFactors = ["on_device_model_advisory"];
+      riskContributionsPct = { on_device_model_advisory: 100 };
+      disclaimer =
+        "Offline advisory estimate from the on-device model (not the authoritative backend risk engine). No payment authorized or initiated.";
+    } else {
+      score = 15;
+      if (request.amount > 20000) {
+        score = 75;
+      } else if (request.amount > 5000) {
+        score = 45;
+      }
+      level = score > 60 ? "HIGH" : score > 30 ? "MEDIUM" : "LOW";
+      decision = level === "HIGH" ? "CONFIRM_OR_CANCEL" : level === "MEDIUM" ? "WARN_CHOICE" : "ALLOW";
+      reasons =
+        level === "HIGH"
+          ? ["High amount transfer deviates from normal baseline", "Unverified recipient profile"]
+          : level === "MEDIUM"
+          ? ["Moderate amount transaction", "First-time transfer to this recipient"]
+          : ["Standard verified payment signature", "Known device and location pattern"];
+      riskFactors = ["amount_deviation", "recipient_novelty"];
+      riskContributionsPct = { amount_deviation: 60, recipient_novelty: 40 };
+      disclaimer = "Advisory pre-payment evaluation only. No payment authorized or initiated.";
+    }
 
     return {
       success: true,
@@ -901,11 +959,11 @@ class CentralPaymentManager {
         risk_level: level,
         decision,
         plain_language_reasons: reasons,
-        risk_factors: ["amount_deviation", "recipient_novelty"],
-        risk_contributions_pct: { amount_deviation: 60, recipient_novelty: 40 },
+        risk_factors: riskFactors,
+        risk_contributions_pct: riskContributionsPct,
         recipient: {
           raw_input: raw,
-          normalized: isUpi ? raw.toLowerCase() : raw.replace(/[\s\-\(\)]/g, "").replace(/^(\+91|91)/, ""),
+          normalized: normalizedRecipient,
           recipient_type: recType,
           display_name: null,
           resolution_status: isUpi ? "UNVERIFIED" : "UNRESOLVED",
@@ -915,7 +973,7 @@ class CentralPaymentManager {
         qr_data: request.qr_data,
         latency_ms: 12.5,
         timestamp: new Date().toISOString(),
-        disclaimer: "Advisory pre-payment evaluation only. No payment authorized or initiated.",
+        disclaimer,
         isAuthorized: false,
         isApproved: false,
         isCompleted: false,
