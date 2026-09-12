@@ -41,12 +41,14 @@ from app.api.routers import (
     alerts,
     auth,
     demo,
+    financial_profile,
     guardian,
     institution,
     notifications,
     payments,
     risk,
     simulator,
+    statements,
     transactions,
     users,
     voice_stream,
@@ -135,6 +137,8 @@ app.include_router(voice_stream.router)
 app.include_router(payments.router)
 app.include_router(demo.router)
 app.include_router(notifications.router)
+app.include_router(financial_profile.router)
+app.include_router(statements.router)
 
 
 @app.get("/", include_in_schema=False)
