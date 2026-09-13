@@ -202,11 +202,35 @@ client-held keys) was explicitly considered and rejected as out of scope.
   scenario. Deliberately NOT ported: Columbo Protocol trap-prompt text
   generation (`engine/copilot/static_trap_prompts.py`) — that's
   supplementary counter-inquiry UX copy, not part of the risk score.
-- Behaviour anomaly: **not started**. The IsolationForest model needs an
-  on-device export path and the user's historical baseline shipped to the
-  device, which the `model-sync`/`UserPatternService` machinery partially
-  supports already. Device-risk scoring is a simple deterministic
-  heuristic with no model to export.
+- Behaviour anomaly: **done**. A real gap was found while scoping this:
+  `ml/inference/anomaly.py`'s more elaborate `BehaviourAnomalyDetector`
+  (with refusal semantics and its own model registry) turned out NOT to
+  be what the live `/risk/evaluate` path actually uses — checked directly.
+  The real signal is a plain `IsolationForest` loaded straight from
+  `ml/models/anomaly_forest.joblib` inside `ml/inference/predict.py`, on
+  6 purely numeric features (no text, so no ONNX contrib-op risk the way
+  the voice NLP model had). `apps/mobile/src/services/ml/behaviour-
+  anomaly-forest.ts` reimplements sklearn's IsolationForest scoring math
+  exactly (per-tree path length, the `c(n)` leaf-sample-count correction,
+  the `2**(-depth/denom)` transform, the `offset_` subtraction) against
+  the actual fitted tree structures exported to
+  `assets/anomaly/behaviour_anomaly_forest.json` — not retrained. Verified
+  against sklearn's own `decision_function()`/`score_samples()` on 6
+  feature vectors spanning ordinary to extreme behaviour
+  (`behaviour-anomaly-parity.regression.ts`, 19/19). That parity test
+  caught a real bug: the depth-computation traversal only walked
+  `children_left`, never `children_right`, so most tree nodes silently
+  kept a default depth of 0 — every score was wrong until fixed.
+  `apps/mobile/src/services/behaviour-anomaly-service.ts` derives 4 of
+  the 6 features from this device's own local transaction history to a
+  recipient (same "local, not cross-user population" approximation
+  already documented for the fraud model); the other 2
+  (`location_distance_km`, `impossible_travel_speed_kmh`) default to 0.0
+  since this app has no location-tracking dependency at all — checked
+  directly — which is exactly what `predict.py` itself does when those
+  signals are unavailable, not a value invented here. Wired into
+  `PaymentService.evaluatePaymentOffline` alongside the fraud-model
+  signal, blended as two independent elevated/not verdicts.
 
 **CONFIRMED — encryption at rest, phase 1 landed:**
 `app/core/field_encryption.py`'s `EncryptedText` (a SQLAlchemy
@@ -251,6 +275,5 @@ dedup-hash only, by original design per its own docstring).
 - Escalation trigger logic and sensitive-category list for the Support AI.
 - Live microphone/call-audio capture pipeline for on-device voice
   anti-spoofing and voice-intent NLP (§12) — not yet scoped,
-  platform-constrained.
-- On-device export path for the behaviour-anomaly (IsolationForest)
-  model (§12).
+  platform-constrained. This is now the only remaining gap in the
+  on-device inference roadmap; every model itself has a verified port.

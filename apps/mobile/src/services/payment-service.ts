@@ -31,6 +31,7 @@ import {
 } from "../utils/recipient-type";
 import { buildRiskEvaluationPayload } from "./risk-service";
 import type { LocalRiskEstimate } from "./recipient-risk-service";
+import type { LocalAnomalyEstimate } from "./behaviour-anomaly-service";
 import {
   parseUpiPaymentPayload,
   ParsedUpiPaymentData,
@@ -907,6 +908,18 @@ class CentralPaymentManager {
       localEstimate = null;
     }
 
+    // Behaviour-anomaly forest is pure JS/JSON (no native module), so no
+    // try/catch-on-load is needed the way the ONNX fraud model needs one —
+    // still guarded defensively since it's advisory-only and must never
+    // block evaluatePaymentOffline's fallback chain.
+    let localAnomaly: LocalAnomalyEstimate | null = null;
+    try {
+      const { estimateBehaviourAnomalyLocally } = require("./behaviour-anomaly-service");
+      localAnomaly = estimateBehaviourAnomalyLocally(request.amount, normalizedRecipient, this.transactions);
+    } catch {
+      localAnomaly = null;
+    }
+
     let score: number;
     let level: "LOW" | "MEDIUM" | "HIGH";
     let decision: string;
@@ -915,22 +928,56 @@ class CentralPaymentManager {
     let riskContributionsPct: Record<string, number>;
     let disclaimer: string;
 
-    if (localEstimate) {
-      score = localEstimate.elevated ? 70 : 20;
+    if (localEstimate || localAnomaly) {
+      // Two independent on-device signals, same spirit as the server's own
+      // saturation fusion (ml/inference/predict.py) but simplified to two
+      // boolean "elevated" verdicts rather than continuous probabilities,
+      // since that's the only thing either signal exposes as advisory-safe
+      // (see recipient-risk-service.ts's SCALE WARNING for why the raw
+      // fraud probability specifically must never be treated as a score).
+      const fraudElevated = localEstimate?.elevated ?? false;
+      const anomalyElevated = localAnomaly?.elevated ?? false;
+      const bothPresent = Boolean(localEstimate) && Boolean(localAnomaly);
+      const elevatedCount = (fraudElevated ? 1 : 0) + (anomalyElevated ? 1 : 0);
+
+      if (bothPresent && elevatedCount === 2) {
+        score = 85;
+      } else if (elevatedCount >= 1) {
+        score = 55;
+      } else {
+        score = 15;
+      }
+
       level = score > 60 ? "HIGH" : score > 30 ? "MEDIUM" : "LOW";
       decision = level === "HIGH" ? "CONFIRM_OR_CANCEL" : level === "MEDIUM" ? "WARN_CHOICE" : "ALLOW";
-      reasons = localEstimate.elevated
-        ? [
-            "On-device model flagged this recipient/amount pattern as elevated risk",
-            localEstimate.scorable
-              ? "Based on your prior payment history to this recipient on this device"
-              : "Limited prior on-device history with this recipient",
-          ]
-        : ["On-device model found no elevated risk signal", "Consistent with your typical payment pattern"];
-      riskFactors = ["on_device_model_advisory"];
-      riskContributionsPct = { on_device_model_advisory: 100 };
+
+      reasons = [];
+      if (fraudElevated) {
+        reasons.push(
+          localEstimate?.scorable
+            ? "On-device fraud model: elevated risk based on prior payment history to this recipient"
+            : "On-device fraud model: elevated risk (limited prior history with this recipient)"
+        );
+      }
+      if (anomalyElevated) {
+        reasons.push(
+          localAnomaly?.scorable
+            ? "On-device behaviour model: this amount deviates from your typical pattern with this recipient"
+            : "On-device behaviour model: elevated deviation signal (limited prior history)"
+        );
+      }
+      if (reasons.length === 0) {
+        reasons.push("On-device models found no elevated risk signal", "Consistent with your typical payment pattern");
+      }
+
+      riskFactors = [
+        ...(localEstimate ? ["on_device_fraud_model"] : []),
+        ...(localAnomaly ? ["on_device_behaviour_anomaly"] : []),
+      ];
+      const factorCount = riskFactors.length || 1;
+      riskContributionsPct = Object.fromEntries(riskFactors.map((f) => [f, Math.round(100 / factorCount)]));
       disclaimer =
-        "Offline advisory estimate from the on-device model (not the authoritative backend risk engine). No payment authorized or initiated.";
+        "Offline advisory estimate from on-device models (not the authoritative backend risk engine). No payment authorized or initiated.";
     } else {
       score = 15;
       if (request.amount > 20000) {
