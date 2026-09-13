@@ -94,6 +94,7 @@ def test_production_secret_validation_succeeds_with_hardened_config():
         transaction_integrity_key="production-dedicated-integrity-key-min-32-bytes",
         hash_pepper="production-strong-unique-hash-pepper-value-1234",
         contact_info_encryption_key="s40_production_real_fernet_key_placeholder_val=",
+        app_data_encryption_key="s40_production_real_fernet_key_placeholder_va2=",
         otp_delivery_provider="twilio",
         enable_dev_otp_inspection=False,
         enable_demo_endpoints=False,
@@ -112,6 +113,7 @@ def test_production_otp_safety_rejects_mock_delivery():
         transaction_integrity_key="production-dedicated-integrity-key-min-32-bytes",
         hash_pepper="production-strong-unique-hash-pepper-value-1234",
         contact_info_encryption_key="s40_production_real_fernet_key_placeholder_val=",
+        app_data_encryption_key="s40_production_real_fernet_key_placeholder_va2=",
         otp_delivery_provider="mock",
         enable_dev_otp_inspection=False,
     )

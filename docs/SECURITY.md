@@ -134,6 +134,88 @@ should not depend on proprietary inference APIs. This is as much a
 data-governance decision as an architectural one — it avoids sending
 user voice/text content to third-party inference providers by default.
 
+## 12. On-device inference and encryption roadmap
+
+**Not spec-derived** — a direction set later in the project (product
+owner decision, not `S40_End_to_End_Project_Plan_FINAL.md`), recorded
+here per this file's own convention rather than left undocumented.
+
+**CONFIRMED — threat model for "encrypted in transit":** protection is
+against network eavesdroppers, not against the server operator. TLS in
+transit (already in place in production —
+`https://s44-production.up.railway.app`) plus encryption at rest in the
+database is the target; the running API is still expected to decrypt data
+server-side when it needs to (serving a request, running a training job).
+A design where the server itself never sees plaintext (federated learning,
+client-held keys) was explicitly considered and rejected as out of scope.
+
+**CONFIRMED — on-device inference, phased:**
+- Transaction fraud (recipient risk): **done**. `fraud_real.onnx` is
+  bundled in the mobile app; `RecipientRiskService.estimateLocally`
+  (`apps/mobile/src/services/recipient-risk-service.ts`) runs it
+  on-device as an advisory-only signal, wired into
+  `PaymentService.evaluatePaymentOffline`'s fallback path. Never
+  authoritative — `POST /api/v1/risk/evaluate` remains the only
+  authoritative decision, per this file's and `risk-service.ts`'s "no
+  client-side risk heuristics" doctrine.
+- Audio anti-spoofing / synthetic-voice detection: **done**, as a faithful
+  port. `apps/mobile/src/services/audio-anti-spoofing.ts` re-implements
+  `voice/anti_spoofing/acoustic_analyzer.py` and `detector.py` (pure
+  signal-processing math — no trained model ever existed for this
+  detector, so there was nothing to export) and is verified against the
+  Python original using real recordings in
+  `demo_recordings/`. Wired into the mobile "AI Voice Cloning" demo
+  scenario against a bundled real recording
+  (`apps/mobile/assets/audio/ai_voice_clone_demo.wav`), so that scenario
+  computes a genuine on-device result instead of a hardcoded stub.
+  **Caveat, stated plainly**: the app still has no real microphone/live
+  call-audio capture pipeline at all (checked directly — no `expo-av` or
+  equivalent dependency exists). This makes the *algorithm* genuinely
+  on-device and provably correct against real audio, but does not yet
+  make it usable against a real live call; that needs a separate,
+  platform-constrained capture feature (iOS/Android both restrict access
+  to live call audio) not yet scoped.
+- Voice scam-intent NLP, behaviour anomaly: **not started**. The
+  Aho-Corasick trie half of the NLP classifier is pure logic and portable
+  as-is; the trained `voice_nlp.joblib` half and the IsolationForest
+  behaviour-anomaly model both still need an on-device export path (the
+  anomaly detector also needs the user's historical baseline shipped to
+  the device, which the `model-sync`/`UserPatternService` machinery
+  partially supports already). Device-risk scoring is a simple
+  deterministic heuristic with no model to export.
+
+**CONFIRMED — encryption at rest, phase 1 landed:**
+`app/core/field_encryption.py`'s `EncryptedText` (a SQLAlchemy
+`TypeDecorator`, Fernet, key `APP_DATA_ENCRYPTION_KEY` — distinct from
+`CONTACT_INFO_ENCRYPTION_KEY`) transparently encrypts the free-text
+columns that name a recipient/amount/person in plain language:
+`Notification.title`/`.body`, `Alert.summary`, `Transaction.location`,
+`GuardianRequest.resolution_notes`, `FraudCase.review_notes`. Applying it
+required no schema migration (it only changes how the app interprets an
+existing `Text`/`String` column, not the column's SQL type) and no
+call-site changes (encryption/decryption happens at the ORM boundary, so
+Pydantic's `from_attributes` schema serialization gets plaintext
+transparently). A value that fails to decrypt is treated as legacy
+plaintext (a row written before the column was encrypted) and returned
+unchanged rather than blanked — this is a deliberate difference from
+`contact_encryption.decrypt_field()`, which returns `""` on failure and
+would be wrong here.
+
+Deliberately NOT encrypted, and why: `Recipient.recipient_hash` and
+`VoiceAnalysis.transcript_hash` are one-way hashes by original design
+(§2 above) — stronger than reversible encryption for data that's never
+redisplayed, so `EncryptedText` doesn't apply. `TrustedContact` already
+uses hash + masked-display (`contact_phone_hash` / `phone_masked`).
+Amounts stay plaintext numeric columns — the server needs them for
+training/aggregation regardless, and encrypting a numeric column breaks
+arithmetic/sorting for no privacy benefit under the confirmed threat
+model.
+
+**UNDECIDED**: whether `StatementLedgerTransaction` or other tables
+should get equivalent columns added later; none currently hold free text
+worth encrypting (checked directly — that table is amount/timestamp/type/
+dedup-hash only, by original design per its own docstring).
+
 ------------------------------------------------------------------------
 
 ## Summary of open security items requiring a decision
@@ -143,3 +225,7 @@ user voice/text content to third-party inference providers by default.
 - Rate-limiting thresholds for sensitive endpoints.
 - Retention periods for transactions, risk scores, and audit logs.
 - Escalation trigger logic and sensitive-category list for the Support AI.
+- Live microphone/call-audio capture pipeline for on-device voice
+  anti-spoofing (§12) — not yet scoped, platform-constrained.
+- On-device export path for the voice-intent NLP model and the behaviour-
+  anomaly (IsolationForest) model (§12).

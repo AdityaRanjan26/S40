@@ -9,10 +9,11 @@ false-positive review queue, not a user-facing notification.
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.field_encryption import EncryptedText
 
 
 class Notification(Base):
@@ -21,8 +22,11 @@ class Notification(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     type: Mapped[str] = mapped_column(String(50), nullable=False)
-    title: Mapped[str] = mapped_column(String(150), nullable=False)
-    body: Mapped[str] = mapped_column(Text, nullable=False)
+    # Encrypted at rest (app/core/field_encryption.py) — these are
+    # human-readable messages that routinely name a recipient/amount/
+    # guardian, unlike `type`, which is just a short category tag.
+    title: Mapped[str] = mapped_column(EncryptedText, nullable=False)
+    body: Mapped[str] = mapped_column(EncryptedText, nullable=False)
     transaction_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("transactions.id"), nullable=True, index=True
     )

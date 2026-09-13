@@ -94,6 +94,15 @@ class Settings(BaseSettings):
     #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     contact_info_encryption_key: str = "_SiZeLTNC9qRCBhjjnil3lbCAYqQYDheLL-DYZ0fq1g="
 
+    # Symmetric key for app/core/field_encryption.py (Fernet). Broader than
+    # contact_info_encryption_key: covers general free-text application
+    # columns (notification bodies, alert summaries, resolution notes,
+    # transaction location) added under encryption after they already held
+    # plaintext rows — see that module's docstring for the legacy-plaintext
+    # fallback this implies. Same dev-default caveat as the key above:
+    #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    app_data_encryption_key: str = "mz-QjS8Q2QWIl2y4cF7HWcRTWbeGbt4HWGgvgKjjyFg="
+
     # Authentication & JWT Configuration
     jwt_secret_key: str = "s40-dev-insecure-jwt-secret-key-change-in-production-1234567890"
     jwt_algorithm: str = "HS256"
@@ -166,6 +175,7 @@ INSECURE_DEV_SECRETS = {
     "avaran-dedicated-txn-integrity-key-dev-only",
     "avaran-integrity-hmac-pepper-2026",
     "_SiZeLTNC9qRCBhjjnil3lbCAYqQYDheLL-DYZ0fq1g=",
+    "mz-QjS8Q2QWIl2y4cF7HWcRTWbeGbt4HWGgvgKjjyFg=",
     "s40-dev-insecure-jwt-secret-key-change-in-production-1234567890",
 }
 
@@ -212,6 +222,11 @@ def validate_production_configuration(cfg: Settings) -> None:
         if not cfg.contact_info_encryption_key or cfg.contact_info_encryption_key in INSECURE_DEV_SECRETS:
             raise ValueError(
                 "Production configuration error: CONTACT_INFO_ENCRYPTION_KEY must be a valid unique Fernet key in production."
+            )
+
+        if not cfg.app_data_encryption_key or cfg.app_data_encryption_key in INSECURE_DEV_SECRETS:
+            raise ValueError(
+                "Production configuration error: APP_DATA_ENCRYPTION_KEY must be a valid unique Fernet key in production."
             )
 
         # 4. OTP Provider Safety in Production

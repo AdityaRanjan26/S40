@@ -7,10 +7,11 @@ HIGH-risk payment is detected.
 
 from datetime import datetime, timezone
 from typing import Optional
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.field_encryption import EncryptedText
 from app.models.enums import GuardianOutcome
 
 
@@ -34,7 +35,9 @@ class GuardianRequest(Base):
         default=GuardianOutcome.PENDING,
         nullable=False,
     )
-    resolution_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Encrypted at rest (app/core/field_encryption.py) — free-text notes a
+    # guardian may write when approving/rejecting.
+    resolution_notes: Mapped[Optional[str]] = mapped_column(EncryptedText, nullable=True)
     resolution_channel: Mapped[str] = mapped_column(String(50), nullable=False, default="WEB_CONSOLE")
     integrity_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 

@@ -23,6 +23,7 @@ from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, Numeric, St
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.field_encryption import EncryptedText
 from app.models.enums import TransactionStatus
 
 
@@ -42,7 +43,9 @@ class Transaction(Base):
     timestamp: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True
     )
-    location: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Encrypted at rest (app/core/field_encryption.py) — free-text
+    # location, potentially city/GPS-identifying.
+    location: Mapped[Optional[str]] = mapped_column(EncryptedText, nullable=True)
     payment_method: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     status: Mapped[TransactionStatus] = mapped_column(
         Enum(TransactionStatus, native_enum=False, length=32),
