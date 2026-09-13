@@ -1,0 +1,811 @@
+{
+"hinglishMappings": [
+[
+"\\bpaise\\b",
+"money"
+],
+[
+"\\bpaisa\\b",
+"money"
+],
+[
+"\\brupee\\b",
+"rupees"
+],
+[
+"\\brupees\\b",
+"rupees"
+],
+[
+"\\brupaiya\\b",
+"rupees"
+],
+[
+"\\brupaye\\b",
+"rupees"
+],
+[
+"\\brokda\\b",
+"cash money"
+],
+[
+"\\brokad\\b",
+"cash money"
+],
+[
+"\\btaka\\b",
+"money"
+],
+[
+"\\bpoisha\\b",
+"money"
+],
+[
+"\\bdhan\\b",
+"money"
+],
+[
+"\\brashi\\b",
+"financial amount"
+],
+[
+"\\brakkham\\b",
+"financial amount"
+],
+[
+"\\brakkam\\b",
+"financial amount"
+],
+[
+"\\bdabbu\\b",
+"money"
+],
+[
+"\\bpanam\\b",
+"money"
+],
+[
+"\\bkaasu\\b",
+"money"
+],
+[
+"\\bhana\\b",
+"money"
+],
+[
+"\\bshulk\\b",
+"fee charges"
+],
+[
+"\\bshulka\\b",
+"fee charges"
+],
+[
+"\\bjurmana\\b",
+"penalty fine"
+],
+[
+"\\bjurmane\\b",
+"penalty fine"
+],
+[
+"\\bdand\\b",
+"penalty fine"
+],
+[
+"\\bchalan\\b",
+"penalty fine"
+],
+[
+"\\bchallan\\b",
+"penalty fine"
+],
+[
+"\\bhisaab\\b",
+"account settlement"
+],
+[
+"\\bvasuli\\b",
+"recovery demand"
+],
+[
+"\\bsuraksha deposit\\b",
+"security deposit"
+],
+[
+"\\bdharohar rashi\\b",
+"security deposit"
+],
+[
+"\\bclearance fund\\b",
+"clearance fund"
+],
+[
+"\\bescrow deposit\\b",
+"escrow deposit"
+],
+[
+"\\bverification fee\\b",
+"verification fee"
+],
+[
+"\\bkhata\\b",
+"bank account"
+],
+[
+"\\bkhaate\\b",
+"bank account"
+],
+[
+"\\bkhate\\b",
+"bank account"
+],
+[
+"\\bshakha\\b",
+"bank branch"
+],
+[
+"\\bshaka\\b",
+"bank branch"
+],
+[
+"\\bprabandhak\\b",
+"bank manager"
+],
+[
+"\\bbachat\\b",
+"savings"
+],
+[
+"\\btheva\\b",
+"deposit"
+],
+[
+"\\bbank khata\\b",
+"bank account"
+],
+[
+"\\bbank khaata\\b",
+"bank account"
+],
+[
+"\\bsewa\\b",
+"service"
+],
+[
+"\\bpanjiyaran\\b",
+"registration"
+],
+[
+"\\bpramanikaran\\b",
+"authentication verification"
+],
+[
+"\\bunfreeze\\b",
+"unblock account"
+],
+[
+"\\brelease fund\\b",
+"release money"
+],
+[
+"\\bthana\\b",
+"police station"
+],
+[
+"\\bthane\\b",
+"police station"
+],
+[
+"\\bkotwali\\b",
+"police station"
+],
+[
+"\\bchowki\\b",
+"police post"
+],
+[
+"\\bdaroga\\b",
+"police inspector"
+],
+[
+"\\bhawaldar\\b",
+"police constable"
+],
+[
+"\\bthanedaar\\b",
+"police station incharge"
+],
+[
+"\\bgiraftari\\b",
+"police arrest"
+],
+[
+"\\bgiraftar\\b",
+"police arrest"
+],
+[
+"\\bhatkadi\\b",
+"handcuffs arrest"
+],
+[
+"\\bkarawas\\b",
+"prison jail"
+],
+[
+"\\bjail\\b",
+"prison jail"
+],
+[
+"\\bbandigriha\\b",
+"prison jail"
+],
+[
+"\\bkustody\\b",
+"police custody"
+],
+[
+"\\badalat\\b",
+"court of law"
+],
+[
+"\\bnyayalaya\\b",
+"court of law"
+],
+[
+"\\bkanoon\\b",
+"law"
+],
+[
+"\\bkanooni\\b",
+"legal"
+],
+[
+"\\bkaryawahi\\b",
+"legal action"
+],
+[
+"\\bkarwayi\\b",
+"legal action"
+],
+[
+"\\bkanooni notice\\b",
+"court legal notice"
+],
+[
+"\\bdigital arrest\\b",
+"digital arrest warrant"
+],
+[
+"\\bwarrant\\b",
+"arrest warrant"
+],
+[
+"\\bnon bailable\\b",
+"non bailable warrant"
+],
+[
+"\\bgair zamanati\\b",
+"non bailable warrant"
+],
+[
+"\\bchhapamari\\b",
+"police raid"
+],
+[
+"\\btalashi\\b",
+"police search"
+],
+[
+"\\baprath\\b",
+"criminal crime"
+],
+[
+"\\bapradh\\b",
+"criminal crime"
+],
+[
+"\\bgunaah\\b",
+"criminal crime"
+],
+[
+"\\bdoshi\\b",
+"guilty criminal"
+],
+[
+"\\bdrohi\\b",
+"guilty criminal"
+],
+[
+"\\bmoney laundering\\b",
+"money laundering crime"
+],
+[
+"\\bhawala\\b",
+"illegal money laundering"
+],
+[
+"\\bnarcotics\\b",
+"illegal narcotics drugs"
+],
+[
+"\\bcharas\\b",
+"illegal narcotics contraband"
+],
+[
+"\\bganja\\b",
+"illegal narcotics contraband"
+],
+[
+"\\billegal parcel\\b",
+"illegal contraband courier"
+],
+[
+"\\bcontraband\\b",
+"illegal contraband"
+],
+[
+"\\bdeshdroh\\b",
+"anti national crime"
+],
+[
+"\\bcbi\\b",
+"central bureau of investigation"
+],
+[
+"\\bed officer\\b",
+"enforcement directorate officer"
+],
+[
+"\\benforcement directorate\\b",
+"enforcement directorate"
+],
+[
+"\\bncb\\b",
+"narcotics control bureau"
+],
+[
+"\\bnia\\b",
+"national investigation agency"
+],
+[
+"\\bcyber cell\\b",
+"cyber crime police department"
+],
+[
+"\\bcrime branch\\b",
+"crime branch police"
+],
+[
+"\\bcyber thana\\b",
+"cyber crime police station"
+],
+[
+"\\brbi\\b",
+"reserve bank of india"
+],
+[
+"\\brbi governor\\b",
+"reserve bank authority"
+],
+[
+"\\bincome tax department\\b",
+"income tax authority"
+],
+[
+"\\bcustoms department\\b",
+"customs border authority"
+],
+[
+"\\btrai\\b",
+"telecom regulatory authority"
+],
+[
+"\\bdoorsanchar vibhag\\b",
+"telecom regulatory department"
+],
+[
+"\\bbijli vibhag\\b",
+"electricity board authority"
+],
+[
+"\\bbidyut board\\b",
+"electricity board authority"
+],
+[
+"\\bturant\\b",
+"immediately"
+],
+[
+"\\bturanto\\b",
+"immediately"
+],
+[
+"\\babhi\\b",
+"now"
+],
+[
+"\\babhi ke abhi\\b",
+"right now immediately"
+],
+[
+"\\bjaldi\\b",
+"hurry immediately"
+],
+[
+"\\bphataphat\\b",
+"urgently quickly"
+],
+[
+"\\bsheeghra\\b",
+"urgently immediately"
+],
+[
+"\\btatkal\\b",
+"immediate urgent"
+],
+[
+"\\bavashyak\\b",
+"critical urgent"
+],
+[
+"\\bzaruri\\b",
+"critical urgent"
+],
+[
+"\\bjaruri\\b",
+"critical urgent"
+],
+[
+"\\bdeir mat karo\\b",
+"do not delay immediately"
+],
+[
+"\\bder mat karo\\b",
+"do not delay immediately"
+],
+[
+"\\bbina deri ke\\b",
+"without delay immediately"
+],
+[
+"\\bantim avsar\\b",
+"final last warning notice"
+],
+[
+"\\bantim chetavani\\b",
+"final last warning notice"
+],
+[
+"\\blast chance\\b",
+"final deadline warning"
+],
+[
+"\\b5 minute\\b",
+"5 minutes urgent deadline"
+],
+[
+"\\b10 minute\\b",
+"10 minutes urgent deadline"
+],
+[
+"\\baaj raat tak\\b",
+"tonight deadline"
+],
+[
+"\\bkisi ko mat batana\\b",
+"do not inform anyone"
+],
+[
+"\\bkisi se baat mat karo\\b",
+"do not talk to anyone"
+],
+[
+"\\bghar walo ko mat batana\\b",
+"do not inform family"
+],
+[
+"\\bparivar ko mat batao\\b",
+"do not inform family"
+],
+[
+"\\bdost ko mat batana\\b",
+"do not inform friends"
+],
+[
+"\\bkamre me akele jao\\b",
+"go into isolated room alone"
+],
+[
+"\\bkundi laga lo\\b",
+"lock the room door alone"
+],
+[
+"\\bdarwaza band karo\\b",
+"close door alone"
+],
+[
+"\\bphone mat katna\\b",
+"do not disconnect call"
+],
+[
+"\\bphone mat kaatna\\b",
+"do not disconnect call"
+],
+[
+"\\bcall disconnect mat karna\\b",
+"do not disconnect call"
+],
+[
+"\\bline pe raho\\b",
+"stay on the live line"
+],
+[
+"\\bline par bane rahiye\\b",
+"stay on the live line"
+],
+[
+"\\bgopniya\\b",
+"confidential secret investigation"
+],
+[
+"\\brahasya\\b",
+"confidential secret"
+],
+[
+"\\bofficial secret\\b",
+"confidential national secret"
+],
+[
+"\\bbijli\\b",
+"electricity supply"
+],
+[
+"\\bbidyut\\b",
+"electricity supply"
+],
+[
+"\\bbatti\\b",
+"electricity supply"
+],
+[
+"\\bcurrent\\b",
+"electricity supply"
+],
+[
+"\\bkatuti\\b",
+"power disconnection"
+],
+[
+"\\bkat jayega\\b",
+"will be disconnected"
+],
+[
+"\\bkaat diya jayega\\b",
+"will be disconnected"
+],
+[
+"\\bline cut\\b",
+"power disconnection"
+],
+[
+"\\bsim card band\\b",
+"sim card deactivation"
+],
+[
+"\\bmobile block\\b",
+"phone deactivation"
+],
+[
+"\\bkyc update\\b",
+"kyc update"
+],
+[
+"\\blpg cylinder block\\b",
+"gas connection suspension"
+],
+[
+"\\benydesk\\b",
+"anydesk remote screen control"
+],
+[
+"\\banidesk\\b",
+"anydesk remote screen control"
+],
+[
+"\\banydesk\\b",
+"anydesk remote screen control"
+],
+[
+"\\btimviewer\\b",
+"teamviewer remote screen control"
+],
+[
+"\\bteamviewer\\b",
+"teamviewer remote screen control"
+],
+[
+"\\brustdesk\\b",
+"rustdesk remote screen control"
+],
+[
+"\\bquicksupport\\b",
+"quicksupport remote access"
+],
+[
+"\\bzoho assist\\b",
+"zoho assist remote control"
+],
+[
+"\\bscreen share\\b",
+"remote screen mirror share"
+],
+[
+"\\bscreen mirror\\b",
+"remote screen mirror share"
+],
+[
+"\\bapp download\\b",
+"malicious application download"
+],
+[
+"\\bapk download\\b",
+"malicious apk installation"
+],
+[
+"\\bcode share karo\\b",
+"share 9 digit access code"
+],
+[
+"\\baddress code\\b",
+"remote access address code"
+],
+[
+"\\ballow permission\\b",
+"grant accessibility permission"
+]
+],
+"urgencyKeywords": [
+"\\bimmediately\\b",
+"\\bnow\\b",
+"\\bwithin \\d+ minute",
+"\\bhurry\\b",
+"\\bquick\\b",
+"\\burgent\\b",
+"\\bexpir",
+"\\bblock in \\d+",
+"\\btoday itself\\b",
+"\\bright now\\b",
+"\\blast warning\\b",
+"\\bfinal notice\\b",
+"\\bdo not delay\\b",
+"\\bdeadline\\b",
+"\\bwithout delay\\b",
+"\\bstraightaway\\b",
+"\\binstant\\b"
+],
+"threatKeywords": [
+"\\bpolice\\b",
+"\\barrest\\b",
+"\\blegal action\\b",
+"\\bcourt\\b",
+"\\bfreeze\\b",
+"\\bblock\\b",
+"\\bpenalty\\b",
+"\\bfine\\b",
+"\\bcomplaint\\b",
+"\\bcriminal\\b",
+"\\bsuspension\\b",
+"\\bwarrant\\b",
+"\\bdigital arrest\\b",
+"\\bnarcotics\\b",
+"\\bmoney laundering\\b",
+"\\bfir\\b",
+"\\bjail\\b",
+"\\baction taken\\b",
+"\\bwill disconnect\\b",
+"\\bcut connection\\b",
+"\\billegal parcel\\b",
+"\\bcontraband\\b",
+"\\bsuspended\\b",
+"\\bcustody\\b"
+],
+"authorityKeywords": [
+"\\brbi\\b",
+"\\bbank manager\\b",
+"\\bcyber cell\\b",
+"\\bincome tax\\b",
+"\\bofficer\\b",
+"\\bpolice officer\\b",
+"\\bhead office\\b",
+"\\bcustomer care\\b",
+"\\bpolice station\\b",
+"\\bgovernment\\b",
+"\\bcbi\\b",
+"\\bed\\b",
+"\\benforcement directorate\\b",
+"\\bncb\\b",
+"\\bnarcotics control\\b",
+"\\bcustoms\\b",
+"\\bcustoms department\\b",
+"\\btrai\\b",
+"\\btelecom department\\b",
+"\\belectricity board\\b",
+"\\belectricity department\\b",
+"\\bheadquarters\\b",
+"\\bhead of security\\b",
+"\\bbranch manager\\b",
+"\\binspector\\b"
+],
+"financialKeywords": [
+"\\btransfer\\b",
+"\\bsend money\\b",
+"\\bpay\\b",
+"\\bupi\\b",
+"\\baccount number\\b",
+"\\bdeposit\\b",
+"\\brefund\\b",
+"\\bfee\\b",
+"\\bcharges\\b",
+"\\bverification amount\\b",
+"\\bsecurity deposit\\b",
+"\\bclearance fund\\b",
+"\\bpenalty fine\\b",
+"\\brelease fee\\b",
+"\\bprocessing charge\\b",
+"\\bsettlement\\b",
+"\\brefundable amount\\b"
+],
+"credentialKeywords": [
+"\\botp\\b",
+"\\bpin\\b",
+"\\bcvv\\b",
+"\\bpassword\\b",
+"\\bcard number\\b",
+"\\bsecret code\\b",
+"\\bnet banking password\\b",
+"\\banydesk\\b",
+"\\bteamviewer\\b",
+"\\bscreen share\\b",
+"\\bdownload application\\b",
+"\\bshare code\\b"
+],
+"negationMarkerPatterns": [
+"\\bdon't\\b",
+"\\bdo not\\b",
+"\\bdoesn't\\b",
+"\\bdoes not\\b",
+"\\bwon't\\b",
+"\\bwill not\\b",
+"\\bshouldn't\\b",
+"\\bshould not\\b",
+"\\bcan't\\b",
+"\\bcannot\\b",
+"\\bavoid\\b",
+"\\bnot\\b",
+"\\bnever\\b",
+"(?<![^\\s\\.,!?:;\\\"'()\\[\\]])मत(?![^\\s\\.,!?:;\\\"'()\\[\\]])",
+"(?<![^\\s\\.,!?:;\\\"'()\\[\\]])नहीं(?![^\\s\\.,!?:;\\\"'()\\[\\]])",
+"(?<![^\\s\\.,!?:;\\\"'()\\[\\]])ना(?![^\\s\\.,!?:;\\\"'()\\[\\]])",
+"(?<![^\\s\\.,!?:;\\\"'()\\[\\]])कभी\\s+नहीं(?![^\\s\\.,!?:;\\\"'()\\[\\]])",
+"\\bmat\\b",
+"\\bnahi\\b",
+"\\bnahin\\b",
+"\\bna\\s+karein\\b",
+"\\bmat\\s+karna\\b",
+"\\bmat\\s+dena\\b",
+"\\bmat\\s+batao\\b",
+"\\bkabhi\\s+nahi\\b",
+"(?<![^\\s\\.,!?:;\\\"'()\\[\\]])না(?![^\\s\\.,!?:;\\\"'()\\[\\]])",
+"(?<![^\\s\\.,!?:;\\\"'()\\[\\]])নয়(?![^\\s\\.,!?:;\\\"'()\\[\\]])",
+"(?<![^\\s\\.,!?:;\\\"'()\\[\\]])করবেন\\s+না(?![^\\s\\.,!?:;\\\"'()\\[\\]])",
+"(?<![^\\s\\.,!?:;\\\"'()\\[\\]])দেবেন\\s+না(?![^\\s\\.,!?:;\\\"'()\\[\\]])",
+"(?<![^\\s\\.,!?:;\\\"'()\\[\\]])কখনো\\s+না(?![^\\s\\.,!?:;\\\"'()\\[\\]])",
+"\\bna\\b",
+"\\bnoy\\b",
+"\\bkorben\\s+na\\b",
+"\\bdeben\\s+na\\b",
+"\\bkokhono\\s+na\\b"
+],
+"negationWindowChars": 40
+}

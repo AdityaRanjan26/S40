@@ -1,0 +1,95 @@
+{
+  "category": "CUSTOMS_PARCEL_SEIZURE",
+  "threat_dimension": "AUTHORITY_IMPERSONATION",
+  "weight": 30,
+  "description": "Scammer claims international courier/parcel was intercepted with illegal goods or drugs, demanding immediate penalty",
+  "keywords": {
+    "en": [
+      "customs parcel",
+      "parcel confiscated",
+      "package detained",
+      "customs department",
+      "customs officer",
+      "contraband in courier",
+      "illegal parcel",
+      "narcotics found in parcel",
+      "fake passport parcel",
+      "customs clearance fee",
+      "customs penalty",
+      "dhl parcel police",
+      "fedex courier intercepted"
+    ],
+    "hi": [
+      "कस्टम्स पार्सल",
+      "पार्सल जब्त",
+      "पार्सल रोक लिया गया",
+      "कस्टम विभाग",
+      "कस्टम अधिकारी",
+      "पार्सल में ड्रग्स",
+      "अवैध सामान",
+      "कस्टम ड्यूटी जुर्माना",
+      "कस्टम क्लीयरेंस फीस",
+      "फेडेक्स पार्सल पुलिस",
+      "डीएचएल कूरियर"
+    ],
+    "hi_latin": [
+      "customs parcel",
+      "parcel confiscate ho gaya",
+      "parcel rok liya gaya",
+      "customs vibhag",
+      "customs officer",
+      "parcel me drugs mile hai",
+      "illegal package pakda gaya",
+      "customs duty penalty",
+      "customs clearance fee",
+      "fedex parcel police",
+      "dhl courier case"
+    ],
+    "bn": [
+      "কাস্টমস পার্সেল",
+      "পার্সেল বাজেয়াপ্ত",
+      "পার্সেল আটক করা হয়েছে",
+      "কাস্টমস বিভাগ",
+      "কাস্টমস অফিসার",
+      "পার্সেলে মাদক দ্রব্য",
+      "অবৈধ পার্সেল",
+      "কাস্টমস শুল্ক জরিমানা",
+      "কাস্টমস ক্লিয়ারেন্স ফি",
+      "ফেডেক্স পার্সেল পুলিশ",
+      "ডিএইচএল কুরিয়ার"
+    ],
+    "bn_latin": [
+      "customs parcel",
+      "parcel bajeapto hoyeche",
+      "parcel atok kora hoyeche",
+      "customs bibhag",
+      "customs officer",
+      "courier e drugs paoya geche",
+      "obeidho parcel",
+      "customs shulko jorimana",
+      "customs clearance fee",
+      "fedex parcel case",
+      "dhl courier police"
+    ],
+    "or": [
+      "କଷ୍ଟମ୍ସ ପାର୍ସଲ୍",
+      "ପାର୍ସଲ ଜବତ",
+      "ପାର୍ସଲ ଅଟକ ରଖାଯାଇଛି",
+      "କଷ୍ଟମ୍ସ ବିଭାଗ",
+      "କଷ୍ଟମ୍ସ ଅଫିସର",
+      "କୁରିୟରରେ ନିଶା ଦ୍ରବ୍ୟ",
+      "ଅବୈଧ ପାର୍ସଲ",
+      "କଷ୍ଟମ୍ସ ଜରିମାନା"
+    ],
+    "or_latin": [
+      "customs parcel",
+      "parcel jabata",
+      "parcel ataka rakhajaichi",
+      "customs bibhaga",
+      "customs officer",
+      "courier re drugs milichi",
+      "abaidha parcel",
+      "customs penalty tanka"
+    ]
+  }
+}

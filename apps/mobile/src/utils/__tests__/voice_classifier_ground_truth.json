@@ -1,0 +1,145 @@
+[
+  {
+    "text": "Hello, this is Senior Officer Vikram from Central Cyber Security Cell. Your bank account has been flagged for suspicious transactions. You must install AnyDesk immediately and share the OTP.",
+    "overall_voice_risk": 0.6836258001963301,
+    "flags": {
+      "urgency_detected": true,
+      "threat_detected": false,
+      "authority_impersonation": true,
+      "credential_harvesting": true
+    },
+    "active_threat_dimensions": [
+      "URGENCY",
+      "AUTHORITY_IMPERSONATION",
+      "CREDENTIAL_HARVESTING"
+    ],
+    "matched_phrases": [
+      "anydesk",
+      "immediately",
+      "otp"
+    ],
+    "scam_categories": [],
+    "language_detected": "en"
+  },
+  {
+    "text": "Hello mom I love you, how is your day going, see you soon",
+    "overall_voice_risk": 0.03336658985968191,
+    "flags": {
+      "urgency_detected": false,
+      "threat_detected": false,
+      "authority_impersonation": false,
+      "credential_harvesting": false
+    },
+    "active_threat_dimensions": [],
+    "matched_phrases": [],
+    "scam_categories": [],
+    "language_detected": "en"
+  },
+  {
+    "text": "aapka bijli bill turant pay karo warna aaj raat tak line cut ho jayegi",
+    "overall_voice_risk": 0.7272989766171349,
+    "flags": {
+      "urgency_detected": true,
+      "threat_detected": false,
+      "authority_impersonation": false,
+      "credential_harvesting": false
+    },
+    "active_threat_dimensions": [
+      "URGENCY",
+      "FINANCIAL_EXTRACTION"
+    ],
+    "matched_phrases": [
+      "bijli bill",
+      "immediately"
+    ],
+    "scam_categories": [
+      "ELECTRICITY_CUTOFF"
+    ],
+    "language_detected": "en"
+  },
+  {
+    "text": "Please do not share your OTP or PIN with anyone, this is a genuine anti-fraud advisory call from your bank",
+    "overall_voice_risk": 0.008531214109049981,
+    "flags": {
+      "urgency_detected": false,
+      "threat_detected": false,
+      "authority_impersonation": false,
+      "credential_harvesting": false
+    },
+    "active_threat_dimensions": [],
+    "matched_phrases": [],
+    "scam_categories": [],
+    "language_detected": "en"
+  },
+  {
+    "text": "This is CBI headquarters, you are under digital arrest, pay bail immediately or police will arrest you narcotics case",
+    "overall_voice_risk": 0.8004739758883008,
+    "flags": {
+      "urgency_detected": true,
+      "threat_detected": true,
+      "authority_impersonation": true,
+      "credential_harvesting": false
+    },
+    "active_threat_dimensions": [
+      "URGENCY",
+      "LEGAL_THREAT",
+      "AUTHORITY_IMPERSONATION",
+      "FINANCIAL_EXTRACTION"
+    ],
+    "matched_phrases": [
+      "arrest",
+      "cbi",
+      "digital arrest",
+      "immediately",
+      "narcotics",
+      "police",
+      "warrant"
+    ],
+    "scam_categories": [
+      "DIGITAL_ARREST_POLICE"
+    ],
+    "language_detected": "en"
+  },
+  {
+    "text": "नमस्ते, मैं नई दिल्ली सीबीआई मुख्यालय से बोल रहा हूँ। आपके आधार कार्ड पर डिजिटल अरेस्ट वारंट जारी हुआ है। तुरंत जुर्माना भरें।",
+    "overall_voice_risk": 0.7284263998281837,
+    "flags": {
+      "urgency_detected": false,
+      "threat_detected": true,
+      "authority_impersonation": false,
+      "credential_harvesting": false
+    },
+    "active_threat_dimensions": [
+      "LEGAL_THREAT"
+    ],
+    "matched_phrases": [
+      "अरेस्ट वारंट",
+      "डिजिटल अरेस्ट",
+      "डिजिटल अरेस्ट वारंट"
+    ],
+    "scam_categories": [
+      "DIGITAL_ARREST_POLICE"
+    ],
+    "language_detected": "hi"
+  },
+  {
+    "text": "নমস্কার, আমি লালবাজার সাইবার ক্রাইম ব্রাঞ্চ থেকে অফিসার বলছি। আপনার বিরুদ্ধে পুলিশ গ্রেফতারি পরোয়ানা জারি করেছে। এখনই টাকা ট্রান্সফার করুন।",
+    "overall_voice_risk": 0.5384263998281837,
+    "flags": {
+      "urgency_detected": false,
+      "threat_detected": true,
+      "authority_impersonation": false,
+      "credential_harvesting": false
+    },
+    "active_threat_dimensions": [
+      "LEGAL_THREAT"
+    ],
+    "matched_phrases": [
+      "গ্রেফতারি পরোয়ানা"
+    ],
+    "scam_categories": [
+      "DIGITAL_ARREST_POLICE"
+    ],
+    "language_detected": "bn"
+  }
+]

@@ -175,14 +175,38 @@ client-held keys) was explicitly considered and rejected as out of scope.
   make it usable against a real live call; that needs a separate,
   platform-constrained capture feature (iOS/Android both restrict access
   to live call audio) not yet scoped.
-- Voice scam-intent NLP, behaviour anomaly: **not started**. The
-  Aho-Corasick trie half of the NLP classifier is pure logic and portable
-  as-is; the trained `voice_nlp.joblib` half and the IsolationForest
-  behaviour-anomaly model both still need an on-device export path (the
-  anomaly detector also needs the user's historical baseline shipped to
-  the device, which the `model-sync`/`UserPatternService` machinery
-  partially supports already). Device-risk scoring is a simple
-  deterministic heuristic with no model to export.
+- Voice scam-intent NLP: **done**. `apps/mobile/src/services/nlp/`
+  ports the full pipeline — the Aho-Corasick multilingual trie
+  (`aho-corasick-trie.ts`, bundling the same lexicon JSON files as-is),
+  the rule-based linguistic features and Hinglish preprocessing
+  (`voice-features.ts`, `voice-preprocessing.ts`, `code-mixed-
+  normalizer.ts`), the leaky-bucket risk accumulator (`leaky-bucket.ts`),
+  and the trained `voice_nlp.joblib` TF-IDF/LogisticRegression model
+  itself (`voice-tfidf-model.ts`, scored directly from vocabulary/idf/
+  coefficients exported from the fitted model into
+  `assets/nlp/voice_nlp_model.json` — not retrained, not approximated).
+  ONNX export was evaluated and explicitly rejected here: skl2onnx's
+  conversion of the TfidfVectorizer needs the `com.microsoft.Tokenizer`
+  contrib op, whose support in onnxruntime-react-native's prebuilt
+  binary is unverified, whereas a direct math port is fully verifiable.
+  Verified against the real Python classifier on English, Hinglish,
+  Devanagari, and Bengali test transcripts, including a negation case
+  ("please don't share your OTP") that must NOT be flagged — see
+  `voice-classifier-parity.regression.ts`. A genuine bug was caught and
+  fixed by that parity test during porting (a naive ASCII-only `\w` in
+  the text-cleaning step was silently stripping all Devanagari/Bengali
+  text before it ever reached the classifier). Wired into
+  `voice-service.ts` as the fallback when `/ws/voice-stream` is
+  unreachable, replacing what used to be a hardcoded "unavailable"
+  degraded state for every demo scenario — not merely for the audio
+  scenario. Deliberately NOT ported: Columbo Protocol trap-prompt text
+  generation (`engine/copilot/static_trap_prompts.py`) — that's
+  supplementary counter-inquiry UX copy, not part of the risk score.
+- Behaviour anomaly: **not started**. The IsolationForest model needs an
+  on-device export path and the user's historical baseline shipped to the
+  device, which the `model-sync`/`UserPatternService` machinery partially
+  supports already. Device-risk scoring is a simple deterministic
+  heuristic with no model to export.
 
 **CONFIRMED — encryption at rest, phase 1 landed:**
 `app/core/field_encryption.py`'s `EncryptedText` (a SQLAlchemy
@@ -226,6 +250,7 @@ dedup-hash only, by original design per its own docstring).
 - Retention periods for transactions, risk scores, and audit logs.
 - Escalation trigger logic and sensitive-category list for the Support AI.
 - Live microphone/call-audio capture pipeline for on-device voice
-  anti-spoofing (§12) — not yet scoped, platform-constrained.
-- On-device export path for the voice-intent NLP model and the behaviour-
-  anomaly (IsolationForest) model (§12).
+  anti-spoofing and voice-intent NLP (§12) — not yet scoped,
+  platform-constrained.
+- On-device export path for the behaviour-anomaly (IsolationForest)
+  model (§12).

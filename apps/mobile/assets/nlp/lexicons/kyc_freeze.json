@@ -1,0 +1,97 @@
+{
+  "category": "KYC_ACCOUNT_FREEZE",
+  "threat_dimension": "FINANCIAL_EXTRACTION",
+  "weight": 35,
+  "description": "Scammer warns of imminent bank account or SIM block unless KYC/Aadhaar/PAN is verified immediately",
+  "keywords": {
+    "en": [
+      "kyc freeze",
+      "account blocked",
+      "account will be suspended",
+      "bank account frozen",
+      "sim card block",
+      "sim deactivation",
+      "pan card expired",
+      "aadhaar kyc pending",
+      "update kyc urgently",
+      "download bank apk",
+      "share otp for kyc",
+      "enter upi pin to verify",
+      "verify netbanking credentials"
+    ],
+    "hi": [
+      "खाता फ्रीज",
+      "खाता ब्लॉक हो जाएगा",
+      "अकाउंट सस्पेंड",
+      "सिम ब्लॉक हो जाएगी",
+      "सिम बंद",
+      "केवाईसी एक्सपायर",
+      "केवाईसी अपडेट करें",
+      "आधार पैन लिंक",
+      "ओटीपी बताओ",
+      "यूपीआई पिन दर्ज करें",
+      "बैंक ऐप डाउनलोड करें",
+      "सत्यापन के लिए पिन"
+    ],
+    "hi_latin": [
+      "khata freeze ho jayega",
+      "account block ho jayega",
+      "account suspend",
+      "sim card block ho jayegi",
+      "sim band ho jayega",
+      "kyc expire ho gaya",
+      "kyc update karo",
+      "aadhaar pan link",
+      "otp batao kyc ke liye",
+      "upi pin enter karo",
+      "bank app download karo",
+      "verification ke liye pin dalo"
+    ],
+    "bn": [
+      "অ্যাকাউন্ট ফ্রিজ",
+      "অ্যাকাউন্ট ব্লক হয়ে যাবে",
+      "অ্যাকাউন্ট স্থগিত",
+      "সিম কার্ড ব্লক হবে",
+      "সিম বন্ধ হয়ে যাবে",
+      "কেওয়াইসি আপডেট করুন",
+      "কেওয়াইসি মেয়াদ শেষ",
+      "আধার প্যান লিঙ্ক",
+      "ওটিপি দিন",
+      "ইউপিআই পিন দিন",
+      "অ্যাপ ডাউনলোড করুন",
+      "যাচাইকরণের জন্য পিন"
+    ],
+    "bn_latin": [
+      "account freeze hoye jabe",
+      "account block hoye jabe",
+      "account sthogito",
+      "sim card block hobe",
+      "sim bondho hoye jabe",
+      "kyc update korun",
+      "kyc meyad sesh",
+      "aadhaar pan link",
+      "otp din kyc jonno",
+      "upi pin din",
+      "app download korun",
+      "verification er jonno pin"
+    ],
+    "or": [
+      "ଆକାଉଣ୍ଟ ଫ୍ରିଜ୍ ହେବ",
+      "ଆକାଉଣ୍ଟ ବ୍ଲକ୍",
+      "ସିମ୍ ବନ୍ଦ ହୋଇଯିବ",
+      "କେୱାଇସି ଅପଡେଟ୍ କରନ୍ତୁ",
+      "ଆଧାର ପ୍ୟାନ୍ ଲିଙ୍କ୍",
+      "ଓଟିପି ଦିଅନ୍ତୁ",
+      "ୟୁପିଆଇ ପିନ୍ ଦିଅନ୍ତୁ"
+    ],
+    "or_latin": [
+      "account freeze heba",
+      "account block heba",
+      "sim band hoijiba",
+      "kyc update karantu",
+      "aadhaar pan link",
+      "otp diantu",
+      "upi pin diantu"
+    ]
+  }
+}

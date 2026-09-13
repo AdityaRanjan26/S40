@@ -15,6 +15,8 @@ import {
 import { RiskLevel } from "../types/risk";
 import { getApiBaseUrl } from "./api-client";
 import { getDemoVoiceCloneResult } from "./voice-clone-demo-audio";
+import { classifyTranscript } from "./nlp/voice-classifier";
+import { LeakyBucketAccumulator } from "./nlp/leaky-bucket";
 import {
   PATTERN_MAP,
   mapDetectedPatterns,
@@ -304,6 +306,58 @@ export interface ClassifierResponse {
 }
 
 /**
+ * On-device fallback for when /ws/voice-stream is unreachable: replays the
+ * same caller lines through the local classifier (services/nlp/voice-
+ * classifier.ts), accumulating risk with a fresh leaky bucket exactly as
+ * voice_stream.py does per WebSocket connection. Matches the backend's own
+ * "latest classification wins for categorical fields, leaky-bucket wins for
+ * accumulated risk" semantics: matched_phrases/scam_categories/etc. reflect
+ * only the most recent caller line, while accumulated_risk is cumulative.
+ */
+function classifyScriptLinesOnDevice(
+  scriptLines: { speaker: "caller" | "user"; text: string }[]
+): ClassifierResponse {
+  const bucket = new LeakyBucketAccumulator(1.0, 0.02);
+  let accumulated = 0;
+  let latestResult: ReturnType<typeof classifyTranscript> | null = null;
+
+  for (const line of scriptLines) {
+    if (line.speaker !== "caller") continue;
+    latestResult = classifyTranscript(line.text);
+    accumulated = bucket.addRisk(latestResult.overall_voice_risk);
+  }
+
+  let coercionLevel: "SAFE" | "ELEVATED" | "CRITICAL";
+  let isScamAlert: boolean;
+  let message: string;
+  if (accumulated >= 0.7) {
+    coercionLevel = "CRITICAL";
+    isScamAlert = true;
+    message = "CRITICAL SOCIAL ENGINEERING SCAM DETECTED! High pressure coercive scam call in progress.";
+  } else if (accumulated >= 0.35) {
+    coercionLevel = "ELEVATED";
+    isScamAlert = false;
+    message = "Elevated caution: scam keywords detected.";
+  } else {
+    coercionLevel = "SAFE";
+    isScamAlert = false;
+    message = "Normal speech pattern.";
+  }
+
+  return {
+    accumulated_risk: accumulated,
+    coercion_level: coercionLevel,
+    detected_intents: latestResult?.active_threat_dimensions ?? [],
+    matched_phrases: latestResult?.matched_phrases ?? [],
+    scam_categories: latestResult?.scam_categories ?? [],
+    columbo_trap_prompt: latestResult?.columbo_trap_prompt ?? null,
+    language_detected: latestResult?.language_detected ?? "en",
+    is_scam_alert: isScamAlert,
+    message,
+  };
+}
+
+/**
  * Real-time client for the backend's `/ws/voice-stream` classifier.
  */
 class VoiceStreamSession {
@@ -459,42 +513,15 @@ export class VoiceService {
     }
 
     if (!latest) {
-      const unavailableTranscript: TranscriptAnalysis = {
-        status: "unavailable",
-        riskScore: 0,
-        riskLevel: "LOW",
-        detectedPatterns: [],
-        matchedPhrases: [],
-        errorMessage: "Could not reach the voice classifier.",
-        reasons: ["Unable to reach the voice classifier backend."],
-      };
-      const analysis = buildCombinedVoiceAnalysis(
-        unavailableTranscript,
-        createUnavailableAcousticAnalysis()
-      );
-
-      return {
-        status: "active",
-        caller: scenario.caller,
-        durationSec: duration,
-        transcript: lines,
-        riskScore: 0,
-        riskLevel: "LOW",
-        detectedPatterns: [],
-        signals: [
-          {
-            key: "voice",
-            label: "Acoustic & Linguistic Scanner",
-            score: null,
-            status: "unavailable",
-            note: "Could not reach the voice classifier.",
-            factors: [],
-          },
-        ],
-        reasons: ["Unable to reach the voice classifier backend."],
-        alert: { triggered: false, pattern: null, title: "", explanation: "", recommendedAction: "" },
-        analysis,
-      };
+      // Falls back to the on-device classifier (services/nlp/voice-classifier.ts)
+      // rather than degrading to "unavailable" — every scenario line is
+      // already known local script text, so there's nothing the backend
+      // classifier could do here that a faithful local port can't. Verified
+      // against the real Python classifier in
+      // voice-classifier-parity.regression.ts. columbo_trap_prompt/
+      // multimodal_fusion/copilot are deliberately left absent rather than
+      // fabricated — the downstream code already handles their absence.
+      latest = classifyScriptLinesOnDevice(upToStep);
     }
 
     const riskLevel = coercionToLevel(latest.coercion_level);
