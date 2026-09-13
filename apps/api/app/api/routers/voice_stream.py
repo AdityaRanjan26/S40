@@ -1,6 +1,7 @@
 """
-/ws/voice-stream — Real-time WebSocket for live speech transcription, audio anti-spoofing,
-video deepfake detection, and multimodal coercion defense.
+/ws/voice-stream — Real-time WebSocket for live speech transcription, audio
+anti-spoofing (catches a synthetic/cloned voice of a known person), and
+multimodal coercion defense.
 """
 
 import base64
@@ -12,7 +13,6 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from voice.classifier import VoiceClassifier
 from voice.leaky_bucket import LeakyBucketAccumulator
 from voice.anti_spoofing.detector import AudioSpoofDetector
-from engine.vision.deepfake_detector import VideoDeepfakeDetector
 from ml.inference.multimodal_fusion import MultimodalBayesianFusionEngine
 from engine.copilot.adaptive_copilot import AdaptiveCopilot
 
@@ -31,7 +31,6 @@ async def voice_stream_endpoint(websocket: WebSocket):
     classifier = VoiceClassifier()
     accumulator = LeakyBucketAccumulator(capacity=1.0, leak_rate=0.02)
     audio_detector = AudioSpoofDetector(sample_rate=16000)
-    video_detector = VideoDeepfakeDetector(fps=30.0)
     fusion_engine = MultimodalBayesianFusionEngine()
     copilot = AdaptiveCopilot()
 
@@ -39,11 +38,9 @@ async def voice_stream_endpoint(websocket: WebSocket):
         "classifier": classifier,
         "accumulator": accumulator,
         "audio_detector": audio_detector,
-        "video_detector": video_detector,
         "fusion_engine": fusion_engine,
         "copilot": copilot,
         "last_audio_res": {"audio_spoof_prob": 0.05, "is_synthetic_voice": False, "acoustic_evidence": []},
-        "last_video_res": {"video_deepfake_score": 0.0, "is_deepfake": False, "visual_threat_flags": []},
     }
 
     try:
@@ -69,15 +66,7 @@ async def voice_stream_endpoint(websocket: WebSocket):
                 except Exception as e:
                     logger.warning(f"Failed to process audio chunk in session {session_id}: {e}")
 
-            # 2. Process Video Telemetry Packet if provided
-            video_telemetry = packet.get("video_telemetry") if isinstance(packet, dict) else None
-            if video_telemetry and isinstance(video_telemetry, dict):
-                try:
-                    sess["last_video_res"] = sess["video_detector"].evaluate_video_telemetry(video_telemetry)
-                except Exception as e:
-                    logger.warning(f"Failed to process video telemetry in session {session_id}: {e}")
-
-            # 3. Process Text Chunk if provided (Phase 1 Multilingual Trie)
+            # 2. Process Text Chunk if provided (Phase 1 Multilingual Trie)
             if text and text.strip():
                 result = sess["classifier"].classify_transcript(text)
                 chunk_risk = float(result.get("overall_voice_risk", 0.0))
@@ -111,26 +100,22 @@ async def voice_stream_endpoint(websocket: WebSocket):
                 msg = "Normal speech pattern."
 
             audio_res = sess["last_audio_res"]
-            video_res = sess["last_video_res"]
 
-            # 4. Multimodal Bayesian Fusion across all available signals
+            # 3. Multimodal Bayesian Fusion across all available signals
             sub_scores = {
                 "transaction_fraud": 0.0,
                 "behaviour_anomaly": 0.0,
                 "device_risk": 0.0,
                 "voice_risk": float(accumulated),
                 "audio_spoof": float(audio_res.get("audio_spoof_prob", 0.0)),
-                "video_deepfake": float(video_res.get("video_deepfake_score", 0.0)),
             }
             fused_result = sess["fusion_engine"].fuse_multimodal(sub_scores)
 
-            # 5. Adaptive Copilot Counter-Inquiry Strategy
+            # 4. Adaptive Copilot Counter-Inquiry Strategy
             copilot_strategy = sess["copilot"].evaluate_response_strategy(
                 risk_score=fused_result["risk_score"],
                 scam_categories=categories,
                 is_synthetic_voice=audio_res.get("is_synthetic_voice", False),
-                is_deepfake=video_res.get("is_deepfake", False),
-                visual_threat_flags=video_res.get("visual_threat_flags", []),
                 language=lang,
             )
 
@@ -145,17 +130,11 @@ async def voice_stream_endpoint(websocket: WebSocket):
                 "language_detected": lang,
                 "is_scam_alert": is_scam or fused_result["risk_score"] >= 75,
                 "message": msg,
-                # Phase 2: Audio Anti-Spoofing
+                # Phase 2: Audio Anti-Spoofing (synthetic/cloned voice detection)
                 "audio_spoof": {
                     "audio_spoof_prob": round(float(audio_res.get("audio_spoof_prob", 0.0)), 3),
                     "is_synthetic_voice": bool(audio_res.get("is_synthetic_voice", False)),
                     "acoustic_evidence": audio_res.get("acoustic_evidence", []),
-                },
-                # Phase 3: Video Deepfake Tampering
-                "video_deepfake": {
-                    "video_deepfake_score": round(float(video_res.get("video_deepfake_score", 0.0)), 3),
-                    "is_deepfake": bool(video_res.get("is_deepfake", False)),
-                    "visual_threat_flags": video_res.get("visual_threat_flags", []),
                 },
                 # Phase 4: Multimodal Bayesian Saturation Fusion & Adaptive Copilot
                 "multimodal_fusion": {

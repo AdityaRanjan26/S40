@@ -141,7 +141,6 @@ class RiskFusionEngine:
         r_device = sub_scores.get("device_risk", 0.0)
         r_voice = sub_scores.get("voice_risk", 0.0)
         r_audio_spoof = sub_scores.get("audio_spoof", 0.0)
-        r_video_deepfake = sub_scores.get("video_deepfake", 0.0)
 
         # 1. Anti-Double-Counting Control:
         if features.get("new_device", 0) == 1 and r_device > 0.6:
@@ -153,7 +152,6 @@ class RiskFusionEngine:
         comp_device = 1.0 - (weights.get("device_risk", 0.15) * r_device)
         comp_voice = 1.0 - (weights.get("voice_risk", 0.25) * r_voice)
         comp_spoof = 1.0 - (weights.get("audio_spoof", 0.20) * r_audio_spoof)
-        comp_deepfake = 1.0 - (weights.get("video_deepfake", 0.20) * r_video_deepfake)
         comp_rule = 1.0 - (0.25 * r_rule)
 
         combined_survival = (
@@ -162,7 +160,6 @@ class RiskFusionEngine:
             * comp_device
             * comp_voice
             * comp_spoof
-            * comp_deepfake
             * comp_rule
         )
         fused_risk_float = 1.0 - combined_survival
@@ -172,7 +169,6 @@ class RiskFusionEngine:
             r_voice >= 0.60
             or p_fraud >= 0.75
             or r_audio_spoof >= 0.65
-            or r_video_deepfake >= 0.60
             or features.get("amount_vs_avg_ratio", 1.0) >= 15.0
             or s_anomaly >= 0.85
         ):
@@ -205,7 +201,6 @@ class RiskFusionEngine:
                 "device_risk": round(r_device, 4),
                 "voice_risk": round(r_voice, 4),
                 "audio_spoof": round(r_audio_spoof, 4),
-                "video_deepfake": round(r_video_deepfake, 4),
                 "rule_risk": round(r_rule, 4),
             },
             "active_rules": active_rules,

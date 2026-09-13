@@ -2,9 +2,8 @@
 AVARAN Adaptive Defense Copilot (Columbo Protocol v2).
 
 Dynamically generates targeted adversarial challenges and verification prompts
-based on the live multimodal threat matrix:
-- Synthetic voice detected -> Voice Liveness / Phonetic Challenge
-- Visual deepfake detected -> Head Orientation / Camera Movement Challenge
+based on the live threat matrix:
+- Synthetic/cloned voice detected -> Voice Liveness / Phonetic Challenge
 - Digital arrest / Authority fraud -> Phantom Badge & Administrative Dead-End Inquiries
 """
 
@@ -24,16 +23,6 @@ class AdaptiveCopilot:
             "hi": "आवाज़ में गड़बड़ी: कॉलर से आज की तारीख और 'अवारन' शब्द बोलने को कहें।",
             "bn": "কণ্ঠস্বরে অস্বাভাবিকতা: কলারকে আজকের তারিখ এবং 'আভরণ' শব্দটি উচ্চারণ করতে বলুন।",
         },
-        "VISUAL_LIVENESS_CHALLENGE": {
-            "en": "Video manipulation detected: Ask the caller to wave their hand in front of their face or turn their head 90 degrees.",
-            "hi": "वीडियो में छेड़छाड़: कॉलर से अपना चेहरा 90 डिग्री घुमाने या चेहरे के आगे हाथ हिलाने को कहें।",
-            "bn": "ভিডিওতে গরমিল: কলারকে তার মুখ একপাশে ঘোরাতে অথবা মুখের সামনে হাত নাড়তে বলুন।",
-        },
-        "BACKGROUND_LOOP_CHALLENGE": {
-            "en": "Fake background detected: Ask the caller to pan their camera around the police station room.",
-            "hi": "नकली बैकग्राउंड: कॉलर से कहें कि वह कैमरा घुमाकर पूरा पुलिस स्टेशन दिखाए।",
-            "bn": "নকল ব্যাকগ্রাউন্ড: কলারকে ক্যামেরা ঘুরিয়ে চারপাশের থানা ঘর দেখাতে বলুন।",
-        },
     }
 
     def evaluate_response_strategy(
@@ -41,12 +30,10 @@ class AdaptiveCopilot:
         risk_score: int,
         scam_categories: List[str] = None,
         is_synthetic_voice: bool = False,
-        is_deepfake: bool = False,
-        visual_threat_flags: List[str] = None,
         language: str = "en",
     ) -> Dict[str, Any]:
         """
-        Synthesizes multimodal alerts into prioritized counter-inquiry guidance.
+        Synthesizes active threat signals into prioritized counter-inquiry guidance.
 
         Returns:
             Dict containing:
@@ -55,28 +42,9 @@ class AdaptiveCopilot:
                 - explanation: str
         """
         categories = scam_categories or []
-        vis_flags = visual_threat_flags or []
         lang = language if language in ("en", "hi", "bn") else "en"
 
-        # 1. Critical visual deepfake priority
-        if is_deepfake or "SYNTHETIC_FACE_BOUNDARY_WARPING" in vis_flags or "UNNATURAL_BLINK_ABSENCE" in vis_flags:
-            return {
-                "recommended_challenge": self.CHALLENGES["VISUAL_LIVENESS_CHALLENGE"][lang],
-                "challenge_type": "VISUAL_LIVENESS",
-                "escalation_action": "PROMPT_CHALLENGE" if risk_score < 75 else "TERMINATE_CALL",
-                "explanation": "Visual deepfake artifacts detected in video stream.",
-            }
-
-        # 2. Fake background loop priority
-        if "LOOPED_BACKGROUND_FEED" in vis_flags:
-            return {
-                "recommended_challenge": self.CHALLENGES["BACKGROUND_LOOP_CHALLENGE"][lang],
-                "challenge_type": "BACKGROUND_PAN",
-                "escalation_action": "PROMPT_CHALLENGE",
-                "explanation": "Looped background video detected.",
-            }
-
-        # 3. Synthetic voice liveness priority
+        # 1. Synthetic voice liveness priority
         if is_synthetic_voice:
             return {
                 "recommended_challenge": self.CHALLENGES["VOICE_LIVENESS_CHALLENGE"][lang],
@@ -85,7 +53,7 @@ class AdaptiveCopilot:
                 "explanation": "Synthetic or cloned audio stream detected.",
             }
 
-        # 4. Linguistic scam intent traps (Columbo Protocol)
+        # 2. Linguistic scam intent traps (Columbo Protocol)
         if categories:
             trap = get_trap_prompt(categories[0], language=lang)
             if trap:

@@ -33,7 +33,6 @@ export interface FraudAlert {
   scamCategory?: string;
   columboTrapPrompt?: string | null;
   isSyntheticVoice?: boolean;
-  isDeepfake?: boolean;
   copilotGuidance?: AdaptiveCopilotGuidance | null;
 }
 
@@ -169,12 +168,6 @@ export interface TranscriptAnalysisResponse {
   errorMessage?: string | null;
 }
 
-export interface VideoDeepfakeResponse {
-  video_deepfake_score?: number;
-  is_deepfake?: boolean;
-  visual_threat_flags?: string[];
-}
-
 export interface AdaptiveCopilotResponse {
   challenge_type?: string;
   escalation_action?: string;
@@ -198,7 +191,6 @@ export interface CombinedVoiceAnalysisResponse {
   riskLevel: RiskLevel;
   transcriptAnalysis: TranscriptAnalysisResponse;
   acousticAnalysis?: AcousticAnalysisResponse | null;
-  videoDeepfake?: VideoDeepfakeResponse | null;
   copilot?: AdaptiveCopilotResponse | null;
   multimodalFusion?: MultimodalFusionResponse | null;
   hasAcousticData?: boolean;
@@ -328,22 +320,10 @@ export interface AcousticAnalysis {
 }
 
 /**
- * Phase 3: Video Deepfake & Telemetry Analysis.
- */
-export interface VideoDeepfakeAnalysis {
-  status: VoiceAnalysisStatus;
-  videoDeepfakeScore: number | null;
-  isDeepfake: boolean;
-  visualThreatFlags: string[];
-  reason?: string | null;
-  errorMessage?: string | null;
-}
-
-/**
  * Phase 4: Adaptive Copilot Counter-Inquiry Guidance.
  */
 export interface AdaptiveCopilotGuidance {
-  challengeType: "VOICE_LIVENESS" | "VISUAL_LIVENESS" | "BACKGROUND_PAN" | "ADMINISTRATIVE_TRAP" | "NONE" | string;
+  challengeType: "VOICE_LIVENESS" | "ADMINISTRATIVE_TRAP" | "NONE" | string;
   escalationAction: "NONE" | "PROMPT_CHALLENGE" | "TERMINATE_CALL" | string;
   recommendedChallenge?: string | null;
   explanation?: string | null;
@@ -368,11 +348,9 @@ export interface CombinedVoiceAnalysis {
   riskLevel: RiskLevel;
   transcriptAnalysis: TranscriptAnalysis;
   acousticAnalysis: AcousticAnalysis | null;
-  videoDeepfakeAnalysis?: VideoDeepfakeAnalysis | null;
   copilotGuidance?: AdaptiveCopilotGuidance | null;
   multimodalFusion?: MultimodalFusionMetrics | null;
   hasAcousticData: boolean;
-  hasVideoData?: boolean;
   detectedPatterns: DetectedPattern[];
   scamCategories?: string[];
   columboTrapPrompt?: string | null;
@@ -453,13 +431,11 @@ export function buildCombinedVoiceAnalysis(
   transcript: TranscriptAnalysis,
   acoustic?: AcousticAnalysis | null,
   metadata?: VoiceAnalysisMetadata,
-  videoDeepfake?: VideoDeepfakeAnalysis | null,
   copilotGuidance?: AdaptiveCopilotGuidance | null,
   multimodalFusion?: MultimodalFusionMetrics | null
 ): CombinedVoiceAnalysis {
   const acousticResult = acoustic ?? createUnavailableAcousticAnalysis();
   const hasAcoustic = isAcousticAnalysisAvailable(acousticResult);
-  const hasVideo = Boolean(videoDeepfake && videoDeepfake.status === "available");
 
   // When multimodal fusion is provided, its calibrated score takes authoritative precedence
   const overallRiskScore = multimodalFusion && typeof multimodalFusion.fusedRiskScore === "number"
@@ -510,29 +486,12 @@ export function buildCombinedVoiceAnalysis(
     });
   }
 
-  if (hasVideo && typeof videoDeepfake?.videoDeepfakeScore === "number") {
-    signals.push({
-      key: "video",
-      label: "Video Deepfake & Feed Integrity",
-      score: videoDeepfake.videoDeepfakeScore,
-      status: "ok",
-      factors: (videoDeepfake.visualThreatFlags || []).map((flag) => ({
-        label: flag.replace(/_/g, " "),
-        contribution: videoDeepfake.videoDeepfakeScore || 0,
-        direction: "increases" as const,
-      })),
-    });
-  }
-
   const isAlertTriggered =
     overallRiskScore >= 61 ||
     transcript.coercionLevel === "CRITICAL" ||
-    acousticResult.isSyntheticVoice ||
-    Boolean(videoDeepfake?.isDeepfake);
+    acousticResult.isSyntheticVoice;
 
-  const alertTitle = videoDeepfake?.isDeepfake
-    ? "Visual Deepfake & Video Tampering Detected"
-    : acousticResult.isSyntheticVoice
+  const alertTitle = acousticResult.isSyntheticVoice
     ? "Synthetic AI Voice Clone Detected"
     : transcript.scamCategories && transcript.scamCategories.length > 0
     ? `${transcript.scamCategories[0].replace(/_/g, " ")} In Progress`
@@ -548,7 +507,6 @@ export function buildCombinedVoiceAnalysis(
         scamCategory: transcript.scamCategories ? transcript.scamCategories[0] : undefined,
         columboTrapPrompt: transcript.columboTrapPrompt,
         isSyntheticVoice: acousticResult.isSyntheticVoice,
-        isDeepfake: videoDeepfake?.isDeepfake,
         copilotGuidance,
       }
     : {
@@ -565,11 +523,9 @@ export function buildCombinedVoiceAnalysis(
     riskLevel: overallRiskLevel,
     transcriptAnalysis: transcript,
     acousticAnalysis: acousticResult,
-    videoDeepfakeAnalysis: videoDeepfake,
     copilotGuidance,
     multimodalFusion,
     hasAcousticData: hasAcoustic,
-    hasVideoData: hasVideo,
     detectedPatterns: patterns,
     scamCategories: transcript.scamCategories,
     columboTrapPrompt: transcript.columboTrapPrompt,

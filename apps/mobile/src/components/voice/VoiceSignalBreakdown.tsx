@@ -8,7 +8,6 @@ import { StatusBadge } from "../common/StatusBadge";
 import {
   CombinedVoiceAnalysis,
   AcousticAnalysis,
-  VideoDeepfakeAnalysis,
   safeNormalizeVoiceAnalysis,
 } from "../../types/voice";
 
@@ -93,48 +92,6 @@ export const getAcousticDisplay = (acoustic: AcousticAnalysis | null) => {
   };
 };
 
-export const getVideoDeepfakeDisplay = (video?: VideoDeepfakeAnalysis | null) => {
-  const status = video?.status || "unavailable";
-  const hasValidScore =
-    status === "available" &&
-    typeof video?.videoDeepfakeScore === "number" &&
-    !Number.isNaN(video.videoDeepfakeScore);
-
-  if (hasValidScore) {
-    const isDeepfake = Boolean(video?.isDeepfake);
-    const flags = video?.visualThreatFlags || [];
-    const flagText =
-      flags.length > 0
-        ? flags.map((f) => f.replace(/_/g, " ")).join(" · ")
-        : isDeepfake
-        ? "Boundary warping & facial landmark distortion"
-        : "Authentic camera kinematics & physiological blinking verified";
-
-    const score100 = Math.round(video!.videoDeepfakeScore! * 100);
-    const level = score100 >= 60 ? "HIGH" : score100 >= 30 ? "MEDIUM" : "LOW";
-
-    return {
-      isAvailable: true,
-      score: score100,
-      level,
-      statusLabel: isDeepfake ? "DEEPFAKE" : "BONAFIDE",
-      badgeStatus: (isDeepfake ? "high" : "low") as "high" | "low",
-      subText: flagText,
-      isDeepfake,
-    };
-  }
-
-  return {
-    isAvailable: false,
-    score: null,
-    level: null,
-    statusLabel: "NOT MONITORED",
-    badgeStatus: "neutral" as const,
-    subText: video?.reason || "Video stream inactive or camera feed unavailable",
-    isDeepfake: false,
-  };
-};
-
 export const VoiceSignalBreakdown: React.FC<VoiceSignalBreakdownProps> = ({
   analysis,
   showSourceTag = true,
@@ -142,10 +99,8 @@ export const VoiceSignalBreakdown: React.FC<VoiceSignalBreakdownProps> = ({
 }) => {
   const safeAnalysis = safeNormalizeVoiceAnalysis(analysis);
   const acousticInfo = getAcousticDisplay(safeAnalysis.acousticAnalysis);
-  const videoInfo = getVideoDeepfakeDisplay(safeAnalysis.videoDeepfakeAnalysis);
   const hasAcoustic = acousticInfo.isAvailable;
-  const hasVideo = videoInfo.isAvailable;
-  const isMultiModal = hasAcoustic || hasVideo;
+  const isMultiModal = hasAcoustic;
 
   return (
     <View style={[styles.container, style]}>
@@ -158,8 +113,8 @@ export const VoiceSignalBreakdown: React.FC<VoiceSignalBreakdownProps> = ({
           />
           <Text style={styles.sourceTagText}>
             {isMultiModal
-              ? "Multi-Modal Bayesian Fusion · Audio, Video & NLP Active"
-              : "Transcript-based score · Audio & Video telemetry in standby"}
+              ? "Multi-Modal Bayesian Fusion · Audio & NLP Active"
+              : "Transcript-based score · Audio telemetry in standby"}
           </Text>
         </View>
       )}
@@ -221,7 +176,7 @@ export const VoiceSignalBreakdown: React.FC<VoiceSignalBreakdownProps> = ({
           </View>
           <View style={styles.streamDetails}>
             <View style={styles.streamTopLine}>
-              <Text style={styles.streamName}>Audio Anti-Spoofing & Deepfake</Text>
+              <Text style={styles.streamName}>Audio Anti-Spoofing & Voice Clone</Text>
               {hasAcoustic && typeof acousticInfo.score === "number" ? (
                 <Text
                   style={[
@@ -249,48 +204,6 @@ export const VoiceSignalBreakdown: React.FC<VoiceSignalBreakdownProps> = ({
             </Text>
           </View>
         </View>
-
-        {/* Video Deepfake Stream */}
-        {hasVideo && (
-          <>
-            <View style={styles.breakdownDivider} />
-            <View style={styles.streamRow}>
-              <View
-                style={[
-                  styles.streamIconContainer,
-                  videoInfo.isDeepfake && { backgroundColor: colors.threatSurface, borderColor: colors.threatBorder },
-                ]}
-              >
-                <Ionicons
-                  name={videoInfo.isDeepfake ? "videocam-off" : "videocam"}
-                  size={18}
-                  color={videoInfo.isDeepfake ? colors.threat : colors.brand}
-                />
-              </View>
-              <View style={styles.streamDetails}>
-                <View style={styles.streamTopLine}>
-                  <Text style={styles.streamName}>Video Deepfake & Kinematics</Text>
-                  <Text
-                    style={[
-                      styles.streamScore,
-                      { color: getRiskColor(videoInfo.level) },
-                    ]}
-                  >
-                    {videoInfo.score} / 100 · {videoInfo.statusLabel}
-                  </Text>
-                </View>
-                <Text
-                  style={[
-                    styles.streamSub,
-                    videoInfo.isDeepfake && { color: colors.threat, fontWeight: "600" },
-                  ]}
-                >
-                  {videoInfo.subText}
-                </Text>
-              </View>
-            </View>
-          </>
-        )}
       </View>
     </View>
   );

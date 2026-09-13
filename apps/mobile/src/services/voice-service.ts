@@ -5,7 +5,6 @@ import {
   TranscriptLine,
   TranscriptAnalysis,
   AcousticAnalysis,
-  VideoDeepfakeAnalysis,
   AdaptiveCopilotGuidance,
   MultimodalFusionMetrics,
   AudioBufferMetadata,
@@ -15,6 +14,7 @@ import {
 } from "../types/voice";
 import { RiskLevel } from "../types/risk";
 import { getApiBaseUrl } from "./api-client";
+import { getDemoVoiceCloneResult } from "./voice-clone-demo-audio";
 import {
   PATTERN_MAP,
   mapDetectedPatterns,
@@ -23,7 +23,6 @@ import {
   validateRiskScore,
   normalizeTranscriptResponse,
   normalizeAcousticResponse,
-  normalizeVideoDeepfakeResponse,
   normalizeAdaptiveCopilotResponse,
   normalizeCombinedResponse,
   parseWebSocketMessage,
@@ -38,7 +37,6 @@ export {
   validateRiskScore,
   normalizeTranscriptResponse,
   normalizeAcousticResponse,
-  normalizeVideoDeepfakeResponse,
   normalizeAdaptiveCopilotResponse,
   normalizeCombinedResponse,
   parseWebSocketMessage,
@@ -55,8 +53,7 @@ export type SimulationScenarioId =
   | "hindi_digital_arrest"
   | "bengali_police_warrant"
   | "hinglish_power_cut"
-  | "ai_voice_clone"
-  | "video_deepfake_call";
+  | "ai_voice_clone";
 
 export interface SimulationScenario {
   id: SimulationScenarioId;
@@ -70,7 +67,6 @@ export interface SimulationScenario {
     text: string;
     atSec: number;
     audioSpoofSim?: boolean;
-    videoDeepfakeSim?: boolean;
   }[];
 }
 
@@ -273,48 +269,6 @@ export const SIMULATION_SCENARIOS: SimulationScenario[] = [
       },
     ],
   },
-  {
-    id: "video_deepfake_call",
-    title: "Video Call Deepfake & Looped Room",
-    badge: "Phase 3 · Visual Deepfake Tampering",
-    language: "en",
-    caller: {
-      displayName: "DCP Rajesh Verma (Video Call)",
-      phoneNumber: "+91 22 2262 0111",
-      direction: "inbound",
-    },
-    description: "Manipulated video call with unblinking synthetic avatar, boundary warping, and looped police station backdrop.",
-    script: [
-      {
-        speaker: "caller",
-        text: "This is Deputy Commissioner Verma on official video verification. Look directly at your camera screen.",
-        atSec: 4,
-        videoDeepfakeSim: true,
-      },
-      {
-        speaker: "user",
-        text: "Officer, your video feed seems to be glitching and freezing repeatedly.",
-        atSec: 9,
-      },
-      {
-        speaker: "caller",
-        text: "Do not question department equipment. We are monitoring your bank transactions under National Security regulations.",
-        atSec: 16,
-        videoDeepfakeSim: true,
-      },
-      {
-        speaker: "user",
-        text: "Can you turn the camera around to show the room you are in?",
-        atSec: 22,
-      },
-      {
-        speaker: "caller",
-        text: "You are in direct contempt of police procedure. Authorize the financial clearance token immediately.",
-        atSec: 30,
-        videoDeepfakeSim: true,
-      },
-    ],
-  },
 ];
 
 // Backward-compatible default export
@@ -334,11 +288,6 @@ export interface ClassifierResponse {
     audio_spoof_prob: number;
     is_synthetic_voice: boolean;
     acoustic_evidence: string[];
-  };
-  video_deepfake?: {
-    video_deepfake_score: number;
-    is_deepfake: boolean;
-    visual_threat_flags: string[];
   };
   multimodal_fusion?: {
     fused_risk_score: number;
@@ -377,7 +326,7 @@ class VoiceStreamSession {
 
   async sendChunk(
     text: string,
-    options?: { audioSpoofSim?: boolean; videoDeepfakeSim?: boolean }
+    options?: { audioSpoofSim?: boolean }
   ): Promise<ClassifierResponse | null> {
     try {
       await this.connect();
@@ -402,18 +351,10 @@ class VoiceStreamSession {
         }
       };
 
+      // Audio spoof detection for audioSpoofSim scenarios runs on-device
+      // against a real recording (see voice-clone-demo-audio.ts) — no
+      // fake/placeholder audio bytes are sent to the backend for it.
       const payload: Record<string, any> = { text_chunk: text };
-      if (options?.audioSpoofSim) {
-        // Base64 dummy flat PCM to trigger audio spoof detector in simulation mode
-        payload.audio_chunk_b64 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
-      }
-      if (options?.videoDeepfakeSim) {
-        payload.video_telemetry = {
-          eye_aspect_ratios: new Array(90).fill(0.29),
-          frame_difference_series: new Array(90).fill(0.0),
-          perimeter_gradients: new Array(90).fill(0.08),
-        };
-      }
 
       this.socket!.send(JSON.stringify(payload));
     });
@@ -514,7 +455,6 @@ export class VoiceService {
       if (line.speaker !== "caller") continue;
       latest = await activeSession.sendChunk(line.text, {
         audioSpoofSim: line.audioSpoofSim,
-        videoDeepfakeSim: line.videoDeepfakeSim,
       });
     }
 
@@ -579,17 +519,38 @@ export class VoiceService {
         : [latest.message],
     };
 
-    // Phase 2: Acoustic Analysis
+    // Phase 2: Acoustic Analysis. The AI voice-clone demo scenario has a
+    // real bundled recording, so it's analyzed for real, on-device
+    // (audio-anti-spoofing.ts) rather than relying on the backend's
+    // response — the backend never actually receives real call audio for
+    // this simulation (see sendChunk: audioSpoofSim no longer sends fake
+    // PCM), so its `audio_spoof` field would otherwise be a meaningless
+    // baseline computed on silence. Other scenarios still trust a live
+    // backend result if the WS ever returns one.
     let acousticAnalysis: AcousticAnalysis | null = null;
     const isAudioSim = scenario.script.some((s, idx) => idx < step && s.audioSpoofSim);
-    if (latest.audio_spoof || isAudioSim) {
-      const spoofProb = latest.audio_spoof?.audio_spoof_prob ?? (isAudioSim ? 0.92 : 0.05);
-      const isSynthetic = latest.audio_spoof?.is_synthetic_voice ?? isAudioSim;
-      const evidence = latest.audio_spoof?.acoustic_evidence && latest.audio_spoof.acoustic_evidence.length > 0
-        ? latest.audio_spoof.acoustic_evidence
-        : isAudioSim
-        ? ["PITCH_MICRO_TREMOR_ABSENT", "SYNTHETIC_PITCH_FLATNESS", "VOCAL_TRACT_SPECTRAL_RIGIDITY"]
-        : [];
+    if (isAudioSim) {
+      const onDeviceResult = await getDemoVoiceCloneResult();
+      if (onDeviceResult) {
+        const spoofProb = onDeviceResult.audioSpoofProb;
+        acousticAnalysis = {
+          status: "available",
+          riskScore: Math.round(spoofProb * 100),
+          riskLevel: spoofProb >= 0.65 ? "HIGH" : spoofProb >= 0.35 ? "MEDIUM" : "LOW",
+          confidence: 0.95,
+          audioSpoofProb: spoofProb,
+          isSyntheticVoice: onDeviceResult.isSyntheticVoice,
+          acousticEvidence: onDeviceResult.acousticEvidence,
+          detectedAnomalies: onDeviceResult.acousticEvidence,
+          reason: onDeviceResult.isSyntheticVoice
+            ? "On-device analysis of demo recording: pitch tremor flatline & vocoder distortion"
+            : "On-device analysis of demo recording: natural vocal dynamics verified",
+        };
+      }
+    } else if (latest.audio_spoof) {
+      const spoofProb = latest.audio_spoof.audio_spoof_prob;
+      const isSynthetic = latest.audio_spoof.is_synthetic_voice;
+      const evidence = latest.audio_spoof.acoustic_evidence || [];
 
       acousticAnalysis = {
         status: "available",
@@ -603,29 +564,6 @@ export class VoiceService {
         reason: isSynthetic
           ? "AI Voice clone: pitch tremor flatline & vocoder distortion"
           : "Natural vocal dynamics verified",
-      };
-    }
-
-    // Phase 3: Video Deepfake Analysis
-    let videoDeepfakeAnalysis: VideoDeepfakeAnalysis | null = null;
-    const isVideoSim = scenario.script.some((s, idx) => idx < step && s.videoDeepfakeSim);
-    if (latest.video_deepfake || isVideoSim) {
-      const deepfakeScore = latest.video_deepfake?.video_deepfake_score ?? (isVideoSim ? 0.94 : 0.0);
-      const isDeepfake = latest.video_deepfake?.is_deepfake ?? isVideoSim;
-      const flags = latest.video_deepfake?.visual_threat_flags && latest.video_deepfake.visual_threat_flags.length > 0
-        ? latest.video_deepfake.visual_threat_flags
-        : isVideoSim
-        ? ["SYNTHETIC_FACE_BOUNDARY_WARPING", "UNNATURAL_BLINK_ABSENCE", "LOOPED_BACKGROUND_FEED"]
-        : [];
-
-      videoDeepfakeAnalysis = {
-        status: "available",
-        videoDeepfakeScore: deepfakeScore,
-        isDeepfake,
-        visualThreatFlags: flags,
-        reason: isDeepfake
-          ? "Facial boundary warping and unblinking avatar detected"
-          : "Natural facial kinematics verified",
       };
     }
 
@@ -645,13 +583,6 @@ export class VoiceService {
         recommendedChallenge: "Voice anomaly detected: Ask the caller to state today's date and the word 'AVARAN' aloud.",
         explanation: "Synthetic voice markers detected.",
       };
-    } else if (isVideoSim) {
-      copilotGuidance = {
-        challengeType: "VISUAL_LIVENESS",
-        escalationAction: "TERMINATE_CALL",
-        recommendedChallenge: "Video deepfake detected: Do not send money. Ask the caller to pan their camera around the room or hang up.",
-        explanation: "Manipulated video stream detected.",
-      };
     }
 
     // Phase 4: Multimodal Fusion Metrics
@@ -663,12 +594,12 @@ export class VoiceService {
         decision: latest.multimodal_fusion.decision,
         primaryRiskFactors: latest.multimodal_fusion.primary_risk_factors,
       };
-    } else if (isAudioSim || isVideoSim) {
+    } else if (isAudioSim) {
       multimodalFusion = {
         fusedRiskScore: 78,
         riskLevel: "HIGH",
         decision: "CONFIRM_OR_CANCEL",
-        primaryRiskFactors: isVideoSim ? ["Video Deepfake Tampering"] : ["Synthetic Audio Spoof"],
+        primaryRiskFactors: ["Synthetic Audio Spoof"],
       };
     }
 
@@ -680,7 +611,6 @@ export class VoiceService {
         durationSec: duration,
         audioSource: "simulation",
       },
-      videoDeepfakeAnalysis,
       copilotGuidance,
       multimodalFusion
     );

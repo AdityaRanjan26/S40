@@ -17,15 +17,11 @@ export interface AdaptiveCopilotCardProps {
 
 const CHALLENGE_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   VOICE_LIVENESS: "mic-circle-outline",
-  VISUAL_LIVENESS: "videocam-outline",
-  BACKGROUND_PAN: "camera-reverse-outline",
   ADMINISTRATIVE_TRAP: "shield-checkmark-outline",
 };
 
 const CHALLENGE_TITLES: Record<string, string> = {
   VOICE_LIVENESS: "Acoustic Liveness Verification",
-  VISUAL_LIVENESS: "Visual Deepfake Liveness Test",
-  BACKGROUND_PAN: "Environment Pan Test",
   ADMINISTRATIVE_TRAP: "Identity & Jurisdiction Verification",
 };
 

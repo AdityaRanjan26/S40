@@ -6,7 +6,6 @@ import {
   DetectedPattern,
   TranscriptAnalysis,
   TranscriptAnalysisResponse,
-  VideoDeepfakeAnalysis,
   AdaptiveCopilotGuidance,
   MultimodalFusionMetrics,
   VoiceAnalysisStatus,
@@ -327,40 +326,6 @@ export function normalizeAcousticResponse(raw: unknown): AcousticAnalysis {
 }
 
 /**
- * Normalizes Phase 3 video deepfake analysis responses.
- */
-export function normalizeVideoDeepfakeResponse(raw: unknown): VideoDeepfakeAnalysis | null {
-  if (!raw || typeof raw !== "object") return null;
-  const obj = ((raw as any).video_deepfake || (raw as any).videoDeepfake || raw) as Record<string, any>;
-  const rawScore =
-    typeof obj.video_deepfake_score === "number"
-      ? obj.video_deepfake_score
-      : typeof obj.videoDeepfakeScore === "number"
-      ? obj.videoDeepfakeScore
-      : null;
-
-  if (rawScore === null && typeof obj.is_deepfake !== "boolean" && typeof obj.isDeepfake !== "boolean") {
-    return null;
-  }
-
-  const isDeepfake = Boolean(obj.is_deepfake ?? obj.isDeepfake ?? (rawScore !== null && rawScore >= 0.60));
-  const flags = Array.isArray(obj.visual_threat_flags)
-    ? obj.visual_threat_flags.filter((f: unknown): f is string => typeof f === "string")
-    : Array.isArray(obj.visualThreatFlags)
-    ? obj.visualThreatFlags.filter((f: unknown): f is string => typeof f === "string")
-    : [];
-
-  return {
-    status: "available",
-    videoDeepfakeScore: rawScore,
-    isDeepfake,
-    visualThreatFlags: flags,
-    reason: isDeepfake ? "Facial boundary warping or looped background footage detected" : "Natural facial kinematics & blinking verified",
-    errorMessage: null,
-  };
-}
-
-/**
  * Normalizes Phase 4 adaptive copilot guidance.
  */
 export function normalizeAdaptiveCopilotResponse(raw: unknown): AdaptiveCopilotGuidance | null {
@@ -403,9 +368,6 @@ export function normalizeCombinedResponse(raw: unknown): CombinedVoiceAnalysis {
     ? normalizeAcousticResponse(obj.acousticAnalysis || obj.audio_spoof || obj.audioSpoof)
     : createUnavailableAcousticAnalysis();
 
-  // Extract video deepfake
-  const videoDeepfake = normalizeVideoDeepfakeResponse(obj.videoDeepfake || obj.video_deepfake || obj);
-
   // Extract copilot
   const copilot = normalizeAdaptiveCopilotResponse(obj.copilot || obj);
 
@@ -424,7 +386,6 @@ export function normalizeCombinedResponse(raw: unknown): CombinedVoiceAnalysis {
     transcript,
     acoustic,
     obj.metadata,
-    videoDeepfake,
     copilot,
     multimodalFusion
   );

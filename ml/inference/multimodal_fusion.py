@@ -1,12 +1,12 @@
 """
 Multimodal Bayesian Saturation Risk Fusion Engine for S40 / AVARAN.
 
-Unifies 5 independent detection modalities:
+Unifies 4 independent detection modalities:
 1. Transaction Fraud ML (LightGBM/XGBoost calibrated probability).
 2. Behavioral Profile Anomaly (Isolation Forest / Mahalanobis distance).
 3. Voice Vishing Intent NLP (Multilingual Aho-Corasick + Leaky Bucket).
-4. Audio Anti-Spoofing (Acoustic jitter & vocoder distortion).
-5. Video Deepfake Tampering (Blink anomalies, boundary warping, background loops).
+4. Audio Anti-Spoofing (Acoustic jitter & vocoder distortion — catches a
+   synthetic/cloned voice of a known person, e.g. asking for money).
 
 Applies probabilistic saturation fusion, anti-double-counting controls,
 single-threat overrides, and outputs calibrated 0–100 risk decisions.
@@ -21,7 +21,6 @@ DEFAULT_MULTIMODAL_WEIGHTS: Dict[str, float] = {
     "device_risk": 0.15,
     "voice_risk": 0.25,
     "audio_spoof": 0.20,
-    "video_deepfake": 0.20,
 }
 
 DEFAULT_THRESHOLDS = {
@@ -60,7 +59,6 @@ class MultimodalBayesianFusionEngine:
                 - device_risk
                 - voice_risk
                 - audio_spoof
-                - video_deepfake
                 - rule_risk (optional)
             features: Contextual transaction/device feature map.
             active_rules: List of active rule dicts.
@@ -80,7 +78,6 @@ class MultimodalBayesianFusionEngine:
         r_device = min(1.0, sub_scores.get("device_risk", 0.0))
         r_voice = min(1.0, sub_scores.get("voice_risk", 0.0))
         r_audio_spoof = min(1.0, sub_scores.get("audio_spoof", 0.0))
-        r_video_deepfake = min(1.0, sub_scores.get("video_deepfake", 0.0))
         r_rule = min(1.0, sub_scores.get("rule_risk", 0.0))
 
         # Anti-double counting control (e.g. new device in both device risk and rule engine)
@@ -95,7 +92,6 @@ class MultimodalBayesianFusionEngine:
         comp_device = 1.0 - (w["device_risk"] * r_device)
         comp_voice = 1.0 - (w["voice_risk"] * r_voice)
         comp_spoof = 1.0 - (w["audio_spoof"] * r_audio_spoof)
-        comp_deepfake = 1.0 - (w["video_deepfake"] * r_video_deepfake)
         comp_rule = 1.0 - (0.25 * r_rule)
 
         survival = (
@@ -104,7 +100,6 @@ class MultimodalBayesianFusionEngine:
             * comp_device
             * comp_voice
             * comp_spoof
-            * comp_deepfake
             * comp_rule
         )
         fused_float = 1.0 - survival
@@ -112,8 +107,6 @@ class MultimodalBayesianFusionEngine:
         # Single-Threat Critical Override:
         # Any severe independent signal guarantees escalation to at least HIGH tier (>=78)
         critical_override_reasons: List[str] = []
-        if r_video_deepfake >= 0.60:
-            critical_override_reasons.append("Severe video deepfake / visual tampering detected")
         if r_audio_spoof >= 0.65:
             critical_override_reasons.append("Synthetic cloned voice detected on call audio")
         if r_voice >= 0.60:
@@ -147,7 +140,6 @@ class MultimodalBayesianFusionEngine:
             "Behavioral Profile Anomaly": s_anomaly,
             "Voice Vishing Coercion": r_voice,
             "Synthetic Audio Spoof": r_audio_spoof,
-            "Video Deepfake Tampering": r_video_deepfake,
             "Device Novelty": r_device,
         }
         sorted_factors = [k for k, v in sorted(raw_signals.items(), key=lambda item: item[1], reverse=True) if v >= 0.30]
@@ -162,7 +154,6 @@ class MultimodalBayesianFusionEngine:
                 "device_risk": round(r_device, 4),
                 "voice_risk": round(r_voice, 4),
                 "audio_spoof": round(r_audio_spoof, 4),
-                "video_deepfake": round(r_video_deepfake, 4),
                 "rule_risk": round(r_rule, 4),
             },
             "active_rules": active_rules or [],

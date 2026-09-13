@@ -268,7 +268,7 @@ export const VoiceScreen: React.FC = () => {
             <Text style={styles.standbyDesc}>
               {isDisconnected
                 ? "Incident recorded in History and Alerts inbox. Security team notified."
-                : `Ready to simulate "${currentScenario.title}". Evaluates real-time acoustic spoofing, video deepfake kinematics, and linguistic NLP.`}
+                : `Ready to simulate "${currentScenario.title}". Evaluates real-time acoustic spoofing (cloned/AI-generated voice) and linguistic NLP.`}
             </Text>
             <Button
               label={isDisconnected ? `Simulate ${currentScenario.title}` : `Simulate ${currentScenario.title}`}
