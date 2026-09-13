@@ -13,6 +13,28 @@ declare const process: any;
  * Android Emulator normally uses:
  * http://10.0.2.2:8000
  */
+/**
+ * True for hosts that are only ever reachable as local dev servers
+ * (loopback, the Android emulator's host-loopback alias, and RFC1918
+ * private LAN ranges) — none of these can carry a real TLS certificate,
+ * so they're the only hosts allowed to default to plain HTTP. Any other
+ * host defaults to HTTPS unless the caller explicitly asked for
+ * "http://" — enforced in sanitizeApiUrl below.
+ */
+const isLocalDevHost = (host: string): boolean => {
+  if (!host) return false;
+  const h = host.toLowerCase();
+  if (h === "localhost" || h === "127.0.0.1" || h === "10.0.2.2" || h === "::1") return true;
+  const octets = h.split(".").map((p) => Number(p));
+  if (octets.length === 4 && octets.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)) {
+    const [a, b] = octets;
+    if (a === 10) return true; // 10.0.0.0/8
+    if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
+    if (a === 192 && b === 168) return true; // 192.168.0.0/16
+  }
+  return false;
+};
+
 const getHostIp = (): string | null => {
   const hostUri =
     Constants?.expoConfig?.hostUri ||
@@ -42,11 +64,16 @@ const getDefaultFallbackUrl = (): string => {
       return "http://localhost:8000";
     }
     if (hostname) {
-      return `http://${hostname}:8000`;
+      // A non-loopback hostname could be a LAN dev machine (no real cert,
+      // must stay HTTP) or the web build actually being served from a
+      // real domain (must be HTTPS) — only the former gets plain HTTP.
+      const scheme = isLocalDevHost(hostname) ? "http" : "https";
+      return `${scheme}://${hostname}:8000`;
     }
   }
   const hostIp = getHostIp();
   if (hostIp) {
+    // Always a LAN IP from the Expo debugger host, never a public address.
     return `http://${hostIp}:8000`;
   }
   return "https://s44-production.up.railway.app";
@@ -68,7 +95,8 @@ export const sanitizeApiUrl = (url: string): string => {
       return "http://localhost:8000";
     }
     if (hostname) {
-      return `http://${hostname}:8000`;
+      const scheme = isLocalDevHost(hostname) ? "http" : "https";
+      return `${scheme}://${hostname}:8000`;
     }
   }
 
@@ -82,7 +110,14 @@ export const sanitizeApiUrl = (url: string): string => {
     !clean.startsWith("http://") &&
     !clean.startsWith("https://")
   ) {
-    clean = `http://${clean}`;
+    // Secure by default: a bare host/URL with no explicit scheme only
+    // gets plain HTTP if it's a recognized local-dev address (no real TLS
+    // cert is possible there). Anything else — a real domain typed
+    // without a scheme — defaults to HTTPS rather than silently falling
+    // back to plaintext. An explicit "http://" in the input is still
+    // respected as-is below; this only fills in a MISSING scheme.
+    const hostPart = clean.split(/[/:]/)[0];
+    clean = `${isLocalDevHost(hostPart) ? "http" : "https"}://${clean}`;
   }
 
   // In Expo Go or on physical devices, route localhost to packager hostIp

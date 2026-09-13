@@ -149,6 +149,23 @@ server-side when it needs to (serving a request, running a training job).
 A design where the server itself never sees plaintext (federated learning,
 client-held keys) was explicitly considered and rejected as out of scope.
 
+**CONFIRMED — HTTPS enforced by default in the mobile client:**
+`apps/mobile/src/services/api-client.ts`'s URL resolution (`sanitizeApiUrl`/
+`getDefaultFallbackUrl`) now defaults any host without an explicit scheme
+to `https://`, unless that host is a recognized local-dev address
+(loopback, the Android emulator's `10.0.2.2` alias, or an RFC1918 private
+LAN range) — none of which can carry a real TLS certificate, so those
+alone still default to plain HTTP. An explicit `http://` in a caller-
+supplied config is still respected as-is; this only closes the gap where
+a *missing* scheme silently fell back to plaintext HTTP even for a real
+domain. Verified: production (`s44-production.up.railway.app`) and the
+current `.env`/`app.json` configs were already correct before this
+change; the fix guards against a future misconfiguration, not a live
+issue. Also verified directly that mobile↔server traffic resolves and
+connects over IPv4 in both environments (production DNS resolves to an
+IPv4 address; local dev's `uvicorn --host 0.0.0.0` and Expo's LAN-IP
+detection are both IPv4) — no IPv6-only or dual-stack concern exists.
+
 **CONFIRMED — on-device inference, phased:**
 - Transaction fraud (recipient risk): **done**. `fraud_real.onnx` is
   bundled in the mobile app; `RecipientRiskService.estimateLocally`
