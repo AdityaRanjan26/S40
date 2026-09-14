@@ -22,6 +22,8 @@ interface PreparedPaymentCardProps {
   onRequestGuardianApproval?: () => void;
   onRetryGuardian?: () => void;
   isRequestingGuardian?: boolean;
+  onProceedToPayment?: () => void;
+  isProceedingToPayment?: boolean;
 }
 
 export const PreparedPaymentCard: React.FC<PreparedPaymentCardProps> = ({
@@ -36,6 +38,8 @@ export const PreparedPaymentCard: React.FC<PreparedPaymentCardProps> = ({
   onRequestGuardianApproval,
   onRetryGuardian,
   isRequestingGuardian = false,
+  onProceedToPayment,
+  isProceedingToPayment = false,
 }) => {
   const getSourceLabel = (source: PreparedPaymentDraft["source"]) => {
     switch (source) {
@@ -262,6 +266,8 @@ export const PreparedPaymentCard: React.FC<PreparedPaymentCardProps> = ({
             onRetry={onRetryGuardian || onRequestGuardianApproval || (() => {})}
             onEditDetails={onEdit}
             isRequesting={isRequestingGuardian}
+            onProceedToPayment={onProceedToPayment}
+            isProceedingToPayment={isProceedingToPayment}
           />
         </View>
       )}

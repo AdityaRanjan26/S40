@@ -201,6 +201,7 @@ export const PaymentsScreen: React.FC = () => {
   const [entryAmount, setEntryAmount] = useState<string>("");
   const [entryNote, setEntryNote] = useState<string>("");
   const [isEvaluating, setIsEvaluating] = useState<boolean>(false);
+  const [isPersistingPayment, setIsPersistingPayment] = useState<boolean>(false);
   const [paymentDraft, setPaymentDraft] = useState<PaymentDraft | null>(null);
   const [evaluationResult, setEvaluationResult] = useState<EvaluationDisplayResult | null>(null);
   const [isScannerVisible, setIsScannerVisible] = useState<boolean>(false);
@@ -417,6 +418,49 @@ export const PaymentsScreen: React.FC = () => {
       showToast(err?.message || "Failed to dispatch Guardian request", "warning");
     } finally {
       isRequestingGuardianRef.current = false;
+    }
+  };
+
+  // Bridges the "Payment Intake" advisory flow (preparedDraft + evaluationState
+  // + guardianState) into the real transaction/payment-app-launch flow below —
+  // handleEvaluateAndPay's older single-step flow did this inline via
+  // persistPaymentDraftCard + setSelectedTx, but the newer two-step
+  // prepare/analyze UI (PreparedPaymentCard/GuardianEscalationCard) never
+  // wired an equivalent "proceed" step, leaving AUTHORIZATION_READY as a dead
+  // end with no way to actually pay. This restores that final step.
+  const handleProceedToPayment = async () => {
+    if (isPersistingPayment) return;
+    if (!preparedDraft || !evaluationState.data) return;
+
+    setIsPersistingPayment(true);
+    try {
+      const persistRes = await PaymentService.persistPaymentDraftCard(
+        evaluationState.data,
+        preparedDraft,
+        session?.userId || 1
+      );
+
+      if (!persistRes.success || !persistRes.transaction) {
+        showToast(persistRes.error || "Failed to create payment. Please try again.", "warning");
+        return;
+      }
+
+      const persistedTx = persistRes.transaction;
+      setSelectedTx(persistedTx);
+      setPreparedDraft(null);
+      setEvaluationState({ status: "IDLE" });
+      setGuardianState({ status: "IDLE" });
+      setEntryRecipient("");
+      setEntryAmount("");
+      setEntryNote("");
+      setScannedQrPayload("");
+
+      await loadPayments();
+      showToast("Payment created. Choose how to complete it below.", "success");
+    } catch (err: any) {
+      showToast(err?.message || "Failed to create payment", "warning");
+    } finally {
+      setIsPersistingPayment(false);
     }
   };
 
@@ -1184,6 +1228,8 @@ export const PaymentsScreen: React.FC = () => {
                 onRequestGuardianApproval={handleRequestGuardianApproval}
                 onRetryGuardian={handleRequestGuardianApproval}
                 isRequestingGuardian={guardianState.status === "REQUESTING_APPROVAL"}
+                onProceedToPayment={handleProceedToPayment}
+                isProceedingToPayment={isPersistingPayment}
                 onEdit={() => {
                   setPreparedDraft(null);
                   setEvaluationState({ status: "IDLE" });

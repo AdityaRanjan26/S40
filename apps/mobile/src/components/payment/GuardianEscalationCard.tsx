@@ -21,6 +21,8 @@ interface GuardianEscalationCardProps {
   onRetry: () => void;
   onEditDetails?: () => void;
   isRequesting?: boolean;
+  onProceedToPayment?: () => void;
+  isProceedingToPayment?: boolean;
 }
 
 export const GuardianEscalationCard: React.FC<GuardianEscalationCardProps> = ({
@@ -31,6 +33,8 @@ export const GuardianEscalationCard: React.FC<GuardianEscalationCardProps> = ({
   onRetry,
   onEditDetails,
   isRequesting = false,
+  onProceedToPayment,
+  isProceedingToPayment = false,
 }) => {
   const { status, error, blockerNotice, remainingSeconds, requestId, resolutionNotes } =
     guardianState;
@@ -143,23 +147,47 @@ export const GuardianEscalationCard: React.FC<GuardianEscalationCardProps> = ({
         </View>
 
         {/* Actions */}
+        {/* Routes through onProceedToPayment (persists the real transaction,
+            same as the LOW/MEDIUM path) rather than this card's own
+            onRequestApproval -- that call targets
+            POST /api/v1/guardian/requests/evaluation, which has no backend
+            route (only POST /api/v1/guardian/requests exists, and it
+            requires a real transaction_id). Once persisted, the
+            already-working transaction-detail Guardian flow (useGuardian()'s
+            initiateGuardianRequest + live polling) takes over correctly
+            instead of this dead-end pre-transaction request. */}
         <View style={styles.actionsRow}>
-          <Button
-            label="REQUEST GUARDIAN APPROVAL"
-            icon="people"
-            variant="primary"
-            size="sm"
-            loading={isRequesting}
-            onPress={onRequestApproval}
-            testID="request-guardian-approval-btn"
-            style={{ flex: 2 }}
-          />
+          {onProceedToPayment ? (
+            <Button
+              label={isProceedingToPayment ? "Preparing Payment..." : "PROCEED TO GUARDIAN REVIEW"}
+              icon="people"
+              variant="primary"
+              size="sm"
+              loading={isProceedingToPayment}
+              disabled={isProceedingToPayment}
+              onPress={onProceedToPayment}
+              testID="proceed-to-guardian-review-btn"
+              style={{ flex: 2 }}
+            />
+          ) : (
+            <Button
+              label="REQUEST GUARDIAN APPROVAL"
+              icon="people"
+              variant="primary"
+              size="sm"
+              loading={isRequesting}
+              onPress={onRequestApproval}
+              testID="request-guardian-approval-btn"
+              style={{ flex: 2 }}
+            />
+          )}
           {onEditDetails && (
             <Button
               label="EDIT"
               icon="create-outline"
               variant="outline"
               size="sm"
+              disabled={isProceedingToPayment}
               onPress={onEditDetails}
               testID="edit-from-guardian-btn"
               style={{ flex: 1 }}
@@ -499,20 +527,34 @@ export const GuardianEscalationCard: React.FC<GuardianEscalationCardProps> = ({
           </Text>
         </View>
 
-        {/* Edit Details Option */}
-        {onEditDetails && (
-          <View style={styles.actionsRow}>
+        {/* Proceed / Edit Actions */}
+        <View style={styles.actionsRow}>
+          {onProceedToPayment && (
             <Button
-              label="EDIT PAYMENT DETAILS"
+              label={isProceedingToPayment ? "Preparing Payment..." : "PROCEED TO PAY"}
+              icon="arrow-forward-circle"
+              variant="primary"
+              size="sm"
+              loading={isProceedingToPayment}
+              disabled={isProceedingToPayment}
+              onPress={onProceedToPayment}
+              testID="proceed-to-payment-btn"
+              style={{ flex: 2 }}
+            />
+          )}
+          {onEditDetails && (
+            <Button
+              label="EDIT"
               icon="create-outline"
               variant="outline"
               size="sm"
+              disabled={isProceedingToPayment}
               onPress={onEditDetails}
               testID="edit-from-auth-ready-btn"
               style={{ flex: 1 }}
             />
-          </View>
-        )}
+          )}
+        </View>
       </View>
     );
   }
