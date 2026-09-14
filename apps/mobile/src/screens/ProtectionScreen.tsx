@@ -43,21 +43,6 @@ interface CallAlertState {
   signals: string[];
 }
 
-const DEFAULT_CALL_ALERT: CallAlertState = {
-  id: "call-scam-1",
-  callerName: "Unknown Caller",
-  callerNumber: "+91 98450 XXXXX",
-  timeDetected: "Detected during active voice stream",
-  riskLevel: "HIGH",
-  signals: [
-    "Requested OTP",
-    "Requested banking information",
-    "Claimed to be bank support",
-    "Urgent financial transfer request",
-    "Coercion & urgency language",
-  ],
-};
-
 const PAYMENT_FEATURES: ProtectionFeatureItem[] = [
   {
     icon: "shield-checkmark",
@@ -173,11 +158,17 @@ export const ProtectionScreen: React.FC = () => {
   const [activeModuleModal, setActiveModuleModal] = useState<"payment" | "risk" | "call" | null>(null);
   const [selectedAlertForModal, setSelectedAlertForModal] = useState<SecurityAlert | null>(null);
 
-  // Active call alert state
-  const [activeCallAlert, setActiveCallAlert] = useState<CallAlertState | null>(DEFAULT_CALL_ALERT);
+  // Active call alert state — no real call-scam detection is wired to this
+  // yet (see handleReportCall/handleMarkSafe below), so it starts empty
+  // rather than showing a fabricated "scam detected" card on every load.
+  const [activeCallAlert, setActiveCallAlert] = useState<CallAlertState | null>(null);
 
   // Toast state
   const [toastConfig, setToastConfig] = useState<ToastConfig | null>(null);
+
+  // Last real statement-upload receipt — statusFn below echoes this back
+  // instead of fabricating a status (see that prop for why).
+  const lastStatementReceiptRef = useRef<import("../services/statement-upload-service").StatementUploadResponse | null>(null);
 
   const showToast = (message: string, type: "info" | "success" | "warning" = "success") => {
     setToastConfig({ message, type });
@@ -188,7 +179,7 @@ export const ProtectionScreen: React.FC = () => {
       const userId = session?.userId || 1;
       const [ovData, alertData] = await Promise.all([
         PaymentService.getOverview(userId),
-        AlertService.getAlerts(),
+        AlertService.getAlerts(session?.userId),
       ]);
       setOverview(ovData);
       setAlerts(alertData);
@@ -580,11 +571,14 @@ export const ProtectionScreen: React.FC = () => {
                 showToast("Statement removed", "info");
               }}
               onUploadSuccess={(receipt) => {
+                lastStatementReceiptRef.current = receipt;
                 showToast(
                   receipt.trained
                     ? `Baseline calculated: typical payment ~₹${receipt.p50_amount?.toFixed(0) ?? "?"}`
+                    : receipt.status === "FAILED"
+                    ? receipt.message || "Statement could not be processed"
                     : `Parsed ${receipt.parsed_rows ?? 0} transaction(s) from your statement`,
-                  "success"
+                  receipt.status === "FAILED" ? "warning" : "success"
                 );
               }}
               onUploadError={(err) => {
@@ -600,19 +594,29 @@ export const ProtectionScreen: React.FC = () => {
               // that, instead of hitting the unrelated OCR-preview
               // endpoint's /api/v1/statements/{upload_id}/status (which
               // has no record of this upload_id and would 404).
-              statusFn={async (uploadId) => ({
-                status: 200,
-                data: {
-                  upload_id: uploadId,
-                  user_id: session?.userId ?? 0,
-                  filename: "",
-                  status: "COMPLETED",
-                  message: "Your personalized baseline was already calculated from this statement.",
-                  created_at: new Date().toISOString(),
-                  updated_at: new Date().toISOString(),
-                  error_detail: null,
-                },
-              })}
+              //
+              // It must echo the REAL last receipt, not a fixed value —
+              // this used to hardcode status: "COMPLETED" unconditionally,
+              // so refreshing after a genuinely FAILED parse silently
+              // relabeled it as successful.
+              statusFn={async (uploadId) => {
+                const receipt = lastStatementReceiptRef.current;
+                return {
+                  status: 200,
+                  data: {
+                    upload_id: uploadId,
+                    user_id: session?.userId ?? 0,
+                    filename: receipt?.filename ?? "",
+                    status: (receipt?.status as "RECEIVED" | "PROCESSING" | "COMPLETED" | "FAILED") ?? "FAILED",
+                    message:
+                      receipt?.message ??
+                      "No record of this upload — it may not have completed.",
+                    created_at: receipt?.uploaded_at ?? new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                    error_detail: null,
+                  },
+                };
+              }}
             />
           </StaggerRevealCard>
 

@@ -61,15 +61,23 @@ class AlertManager {
     });
   }
 
-  /** GET Alerts (Demo mode or API mode) */
-  public async getAlerts(): Promise<SecurityAlert[]> {
-    if (isDemoMode()) {
+  /**
+   * GET Alerts (Demo mode or API mode). `userId` selects the caller's own
+   * scoped alerts (/api/v1/users/{id}/alerts); without it (e.g. before
+   * login) real alerts can't be fetched, so demo data is shown instead of
+   * a broken empty screen.
+   */
+  public async getAlerts(userId?: number): Promise<SecurityAlert[]> {
+    if (isDemoMode() || !userId) {
       return [...this.alerts];
     }
 
     try {
-      const res = await ApiClient.get<any[]>("/api/v1/alerts");
-      if (res.data && Array.isArray(res.data) && res.data.length > 0) {
+      const res = await ApiClient.get<any[]>(`/api/v1/users/${userId}/alerts`);
+      if (res.data && Array.isArray(res.data)) {
+        // A real, empty result means "no alerts for this account" — it must
+        // not fall back to demo data, or a freshly reset account would show
+        // fabricated alerts that were never actually raised for it.
         this.alerts = res.data.map((a: any) => ({
           id: String(a.id),
           title: a.summary || "Security Alert",
@@ -88,9 +96,9 @@ class AlertManager {
         this.notify();
         return [...this.alerts];
       }
-      // API returned empty — fall through to demo data
     } catch {
-      // Fallback
+      // Network/auth failure — keep whatever was last successfully loaded
+      // (initially demo data) rather than showing a broken empty screen.
     }
 
     return [...this.alerts];

@@ -38,7 +38,7 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   useEffect(() => {
     // Initial fetch
-    AlertService.getAlerts().then((raw) => {
+    AlertService.getAlerts(session?.userId).then((raw) => {
       setAlerts(
         raw.map((a) => ({
           id: a.id,
@@ -109,7 +109,7 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       unsubscribeAlerts();
       unsubscribePayments();
     };
-  }, []);
+  }, [session?.userId]);
 
   const toggleProtection = useCallback(() => {
     setProtectionActive((prev) => !prev);

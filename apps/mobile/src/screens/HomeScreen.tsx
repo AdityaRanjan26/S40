@@ -27,7 +27,6 @@ import {
   UserTransaction,
   EMPTY_PAYMENT_OVERVIEW,
 } from "../services/payment-service";
-import { AlertService, SecurityAlert } from "../services/alert-service";
 import { NotificationDropdown } from "../components/guardian/NotificationDropdown";
 import { GuardianApprovalCard } from "../components/guardian/GuardianApprovalCard";
 import { LinearGradient } from "expo-linear-gradient";
@@ -55,7 +54,6 @@ export const HomeScreen: React.FC = () => {
 
   const [overview, setOverview] = useState<UserPaymentOverview>(EMPTY_PAYMENT_OVERVIEW);
   const [recentTxns, setRecentTxns] = useState<UserTransaction[]>([]);
-  const [alerts, setAlerts] = useState<SecurityAlert[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,14 +68,12 @@ export const HomeScreen: React.FC = () => {
     setError(null);
     try {
       const userId = session?.userId || 1;
-      const [ovData, txnData, alertData] = await Promise.all([
+      const [ovData, txnData] = await Promise.all([
         PaymentService.getOverview(userId),
         PaymentService.getTransactions(userId, "all", 5, 0),
-        AlertService.getAlerts(),
       ]);
       setOverview(ovData);
       setRecentTxns(txnData.items);
-      setAlerts(alertData);
     } catch (e: any) {
       setError("Unable to sync latest financial protection data.");
     } finally {
@@ -131,8 +127,7 @@ export const HomeScreen: React.FC = () => {
   };
 
   const userName = session?.name ? session.name.split(" ")[0] : "Rahul";
-  const activeAlertsList = securityAlerts && securityAlerts.length > 0 ? securityAlerts : alerts;
-  const unreadAlerts = activeAlertsList.filter((a: any) => !a.isRead);
+  const unreadAlerts = securityAlerts.filter((a: any) => !a.isRead);
   const activeReviewTxns = recentTxns.filter((t) => t.status === "Risk detected" || t.status === "Held");
   const suspiciousTx =
     activeReviewTxns.length > 0

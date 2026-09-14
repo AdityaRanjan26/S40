@@ -4,11 +4,13 @@ from sqlalchemy.orm import Session
 
 from app.core.contact_encryption import decrypt_field, encrypt_field
 from app.core.database import get_db
+from app.core.dependencies import get_current_user
 from app.models.enums import RiskLevel, TransactionStatus
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.models.user_contact_info import UserContactInfo
 from app.repositories import risk_repository, transaction_repository
+from app.schemas.alert import AlertRead
 from app.schemas.user import UserCreate, UserRead
 from app.services import user_service
 from app.services.exceptions import UserAlreadyExistsError, UserNotFoundError
@@ -100,6 +102,35 @@ def get_user_devices(user_id: int, db: Session = Depends(get_db)) -> list:
         }
         for i, d in enumerate(devices)
     ]
+
+
+@router.get("/{user_id}/alerts", response_model=list[AlertRead])
+def get_user_alerts(
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list:
+    # /api/v1/alerts (alerts.py) is the institution-wide feed (spec §17/§19
+    # Live Risk Feed) and must stay unscoped for that dashboard use case.
+    # This endpoint exists separately so a signed-in user's own app only
+    # ever sees alerts tied to their own transactions, never another
+    # account's — the same ownership requirement already enforced for
+    # financial_profile.py and statements.py.
+    if current_user.id != user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="You are not authorized to access this user's alerts.",
+        )
+    from app.models.alert import Alert
+
+    return (
+        db.query(Alert)
+        .join(Transaction, Alert.transaction_id == Transaction.id)
+        .filter(Transaction.user_id == user_id)
+        .order_by(Alert.created_at.desc())
+        .limit(50)
+        .all()
+    )
 
 
 def get_risk_level_from_score(score: float) -> str:
