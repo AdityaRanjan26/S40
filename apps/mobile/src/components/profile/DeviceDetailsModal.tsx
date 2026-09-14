@@ -17,15 +17,27 @@ import { typography } from "../../theme/typography";
 import { spacing, radii, shadows } from "../../theme/layout";
 import { Button } from "../common/Button";
 import { StatusBadge } from "../common/StatusBadge";
+import { RegisteredDevice } from "../../services/device-info-service";
 
 interface DeviceDetailsModalProps {
   visible: boolean;
+  device: RegisteredDevice | null;
   onClose: () => void;
   onShowToast: (message: string, type?: "info" | "success" | "warning") => void;
 }
 
+const formatDate = (iso: string | null): string => {
+  if (!iso) return "Unknown";
+  try {
+    return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+  } catch {
+    return "Unknown";
+  }
+};
+
 export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
   visible,
+  device,
   onClose,
   onShowToast,
 }) => {
@@ -34,8 +46,11 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
 
   if (!visible) return null;
 
+  const deviceName = device?.deviceName || "This device";
+  const deviceType = device?.deviceType || "Unknown OS";
+
   const handleSetPrimary = () => {
-    onShowToast("Google Pixel 8 Pro is already your primary device", "info");
+    onShowToast(`${deviceName} is already your primary device`, "info");
   };
 
   const handleDeregister = () => {
@@ -105,10 +120,10 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
       >
         <View style={styles.deviceHeroCard}>
           <View style={styles.heroTop}>
-            <Text style={styles.deviceName}>Google Pixel 8 Pro</Text>
+            <Text style={styles.deviceName}>{deviceName}</Text>
             <StatusBadge label="Primary Device" status="low" />
           </View>
-          <Text style={styles.deviceOs}>Android 15 · Security Patch August 2026</Text>
+          <Text style={styles.deviceOs}>{deviceType}</Text>
         </View>
 
         <View style={styles.specsCard}>
@@ -119,7 +134,7 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
 
           <View style={styles.specRow}>
             <Text style={styles.specLabel}>Hardware Token</Text>
-            <Text style={styles.specValueMono}>dev_hw_sha256_e891...92</Text>
+            <Text style={styles.specValueMono}>{device?.deviceHash || "Not yet registered"}</Text>
           </View>
 
           <View style={styles.specRow}>
@@ -129,19 +144,19 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
 
           <View style={styles.specRow}>
             <Text style={styles.specLabel}>Registered On</Text>
-            <Text style={styles.specValue}>August 15, 2025</Text>
+            <Text style={styles.specValue}>{formatDate(device?.registeredAt ?? null)}</Text>
           </View>
 
           <View style={styles.specRow}>
             <Text style={styles.specLabel}>Last Active Session</Text>
-            <Text style={styles.specValue}>Just now (This device)</Text>
+            <Text style={styles.specValue}>{device?.lastActive ? "Just now (This device)" : "Unknown"}</Text>
           </View>
 
           <View style={styles.specRowNoBorder}>
             <Text style={styles.specLabel}>Security Posture</Text>
             <View style={styles.safeTag}>
               <Ionicons name="checkmark-circle" size={14} color={colors.brand} />
-              <Text style={styles.safeTagText}>Pass (Zero Root/Anomaly)</Text>
+              <Text style={styles.safeTagText}>{device?.securityStatus === "SECURE" ? "Pass (Zero Root/Anomaly)" : "Review Recommended"}</Text>
             </View>
           </View>
         </View>

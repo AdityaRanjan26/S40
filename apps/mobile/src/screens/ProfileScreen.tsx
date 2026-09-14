@@ -29,6 +29,7 @@ import { useBiometrics } from "../context/BiometricContext";
 import { useSecurity } from "../context/SecurityContext";
 import { ConnectedAppsService, ConnectedApp } from "../services/connected-apps-service";
 import { getApiBaseUrl } from "../services/api-client";
+import { getUserDevices, getDeviceName, getDeviceType, RegisteredDevice } from "../services/device-info-service";
 import { AppSwitch } from "../components/common/AppSwitch";
 
 interface SettingRowProps {
@@ -132,6 +133,7 @@ export const ProfileScreen: React.FC = () => {
   const [isServerModalVisible, setIsServerModalVisible] = useState<boolean>(false);
   const [activePolicyModal, setActivePolicyModal] = useState<PolicyType | null>(null);
   const [currentApiEndpoint, setCurrentApiEndpoint] = useState<string>(getApiBaseUrl());
+  const [primaryDevice, setPrimaryDevice] = useState<RegisteredDevice | null>(null);
 
   const isFocused = useIsFocused();
   const hasPlayedProfileStaggerRef = useRef(false);
@@ -147,6 +149,35 @@ export const ProfileScreen: React.FC = () => {
     const unsubscribe = ConnectedAppsService.subscribe((updatedApps) => { setConnectedApps(updatedApps); });
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    if (!session?.userId) return;
+    let cancelled = false;
+    const localName = getDeviceName();
+    const localType = getDeviceType();
+    getUserDevices(session.userId).then((devices) => {
+      if (cancelled) return;
+      // The `devices` table only gains a row once this device has made a
+      // transaction (see device-info-service.ts), so it can't reliably be
+      // matched to "the current device" by id. Best-effort: use the row
+      // whose reported name/type match this device's real, live values;
+      // otherwise fall back to those live values with no backend record.
+      const matched = devices.find((d) => d.deviceName === localName && d.deviceType === localType);
+      setPrimaryDevice(
+        matched || {
+          id: 0,
+          deviceName: localName,
+          deviceType: localType,
+          deviceHash: "",
+          isPrimary: true,
+          registeredAt: null,
+          lastActive: null,
+          securityStatus: "SECURE",
+        }
+      );
+    });
+    return () => { cancelled = true; };
+  }, [session?.userId]);
 
   const showToast = (message: string, type: "info" | "success" | "warning" = "success") => {
     setToastConfig({ message, type });
@@ -252,7 +283,7 @@ export const ProfileScreen: React.FC = () => {
         <StaggerRevealCard index={3} baseDelay={60} hasPlayed={hasPlayedProfileStaggerRef.current} style={styles.section}>
           <Text style={styles.sectionLabel}>Trusted Devices</Text>
           <View style={styles.card}>
-            <SettingRow icon="phone-portrait-outline" label="Google Pixel 8 Pro" sub="Primary device · Registered hardware token" onPress={() => setIsDeviceDetailsVisible(true)} isLast />
+            <SettingRow icon="phone-portrait-outline" label={primaryDevice?.deviceName || "This device"} sub="Primary device · Registered hardware token" onPress={() => setIsDeviceDetailsVisible(true)} isLast />
           </View>
         </StaggerRevealCard>
 
@@ -281,7 +312,7 @@ export const ProfileScreen: React.FC = () => {
       </ScrollView>
 
       <EditProfileModal visible={isEditProfileVisible} initialName={session?.name || "Your Name"} initialPhone={session?.phone || ""} initialEmail={session?.email || ""} onClose={() => setIsEditProfileVisible(false)} onSave={handleSaveProfile} />
-      <DeviceDetailsModal visible={isDeviceDetailsVisible} onClose={() => setIsDeviceDetailsVisible(false)} onShowToast={showToast} />
+      <DeviceDetailsModal visible={isDeviceDetailsVisible} device={primaryDevice} onClose={() => setIsDeviceDetailsVisible(false)} onShowToast={showToast} />
       <ServerEndpointModal visible={isServerModalVisible} onClose={() => setIsServerModalVisible(false)} onEndpointSaved={(newUrl) => { setCurrentApiEndpoint(newUrl); showToast(`Server endpoint updated: ${newUrl}`, "success"); }} />
       <HelpSupportModal visible={isHelpSupportVisible} onClose={() => setIsHelpSupportVisible(false)} onShowToast={showToast} onTriggerTestAlert={() => {}} />
       <PolicyModal visible={activePolicyModal !== null} type={activePolicyModal || "privacy"} onClose={() => setActivePolicyModal(null)} />

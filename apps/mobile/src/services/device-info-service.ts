@@ -81,3 +81,40 @@ export const getDevicePayload = async (): Promise<DevicePayload> => {
     deviceType: getDeviceType(),
   };
 };
+
+export interface RegisteredDevice {
+  id: number;
+  deviceName: string;
+  deviceType: string;
+  deviceHash: string;
+  isPrimary: boolean;
+  registeredAt: string | null;
+  lastActive: string | null;
+  securityStatus: string;
+}
+
+/**
+ * Fetches the caller's registered devices from the backend (real rows in
+ * the `devices` table — populated the first time a transaction is created
+ * from that device, per transaction_service.create_transaction, not at
+ * login). A device that has never made a transaction has no row here yet,
+ * so callers must fall back to local getDeviceName()/getDeviceType()
+ * rather than assume this list contains "the current device".
+ */
+export const getUserDevices = async (userId: number): Promise<RegisteredDevice[]> => {
+  // Lazy import: api-client.ts imports getDevicePayload from this module,
+  // so a static import here would be a circular dependency.
+  const { ApiClient } = await import("./api-client");
+  const res = await ApiClient.get<any[]>(`/api/v1/users/${userId}/devices`);
+  if (!res.data || !Array.isArray(res.data)) return [];
+  return res.data.map((d) => ({
+    id: d.id,
+    deviceName: d.device_name,
+    deviceType: d.device_type,
+    deviceHash: d.device_hash,
+    isPrimary: !!d.is_primary,
+    registeredAt: d.registered_at ?? null,
+    lastActive: d.last_active ?? null,
+    securityStatus: d.security_status,
+  }));
+};
