@@ -15,6 +15,7 @@ import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ExpoReactHostFactory
 
 import com.avaran.security.telemetry.CallGuardPackage
+import ai.onnxruntime.reactnative.OnnxruntimePackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -26,6 +27,11 @@ class MainApplication : Application(), ReactApplication {
           // Bridges the RN "Detect Current Call" / "Hang Up" buttons to
           // LiveCallAudioService's real speech detection.
           add(CallGuardPackage())
+          // onnxruntime-react-native ships as a legacy-style RN native module;
+          // Expo's autolinker doesn't detect its ReactPackage automatically
+          // (it compiles the native .so via CMake but never registers the
+          // bridge module), so it must be added by hand like CallGuardPackage.
+          add(OnnxruntimePackage())
         }
     )
   }
