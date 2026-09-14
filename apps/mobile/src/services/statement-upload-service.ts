@@ -10,7 +10,7 @@
 
 import { Platform } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
-import { ApiClient, ApiResponse } from "./api-client";
+import { ApiClient, ApiResponse, getApiBaseUrl, getAuthToken } from "./api-client";
 import {
   StatementFileType,
   SelectedStatementFile,
@@ -367,40 +367,67 @@ export async function uploadStatementFile(
   }
 
   try {
-    const formData = new FormData();
+    let response: ApiResponse<StatementUploadResponse>;
 
-    // Preserve original filename and canonical MIME type using local URI
-    // React Native's FormData polyfill handles { uri, name, type }
-    if (Platform.OS === "web" && typeof window !== "undefined") {
-      try {
-        const response = await fetch(file.uri);
-        const blob = await response.blob();
-        formData.append("file", blob, file.name);
-      } catch {
-        formData.append("file", {
-          uri: file.uri,
-          name: file.name,
-          type: file.mimeType,
-        } as any);
-      }
-    } else {
+    if (options.uploadFn) {
+      // Test/dependency-injection path — real FormData still works fine
+      // for callers supplying their own mock upload function.
+      const formData = new FormData();
       formData.append("file", {
         uri: file.uri,
         name: file.name,
         type: file.mimeType,
       } as any);
-    }
-
-    let response: ApiResponse<StatementUploadResponse>;
-
-    if (options.uploadFn) {
       response = await options.uploadFn(formData, signal);
+    } else if (Platform.OS === "web") {
+      // Real browsers implement a fully functional Blob, unlike RN's
+      // native-blob-store stub (see the native branch below) — the
+      // standard FormData + fetch path works correctly here.
+      const formData = new FormData();
+      const fileResponse = await fetch(file.uri);
+      const blob = await fileResponse.blob();
+      formData.append("file", blob, file.name);
+      response = await ApiClient.upload<StatementUploadResponse>(endpoint, formData, { signal });
     } else {
-      response = await ApiClient.upload<StatementUploadResponse>(
-        endpoint,
-        formData,
-        { signal }
-      );
+      // Native (iOS/Android): Expo SDK 53+'s global fetch ("winter"
+      // runtime) replaced RN's classic networking bridge and only accepts
+      // a string or a real Blob/File FormData part. But `globalThis.Blob`
+      // here is still React Native's own Blob class, which — by Expo's own
+      // code comment (node_modules/expo/src/winter/fetch/createBlob.ts)
+      // — "cannot be created from binary data in JS"; constructing one
+      // from raw bytes produces an object that still isn't usable as a
+      // multipart part, throwing "Unsupported FormDataPart implementation"
+      // regardless of the {uri,name,type}/Blob/File shape tried.
+      //
+      // expo-file-system's native uploadAsync sidesteps all of that: it
+      // reads the local file and builds the multipart body on the native
+      // side, never touching JS FormData/Blob/fetch at all.
+      const FileSystem = require("expo-file-system/legacy");
+      const baseUrl = getApiBaseUrl();
+      const token = getAuthToken();
+      const uploadResult = await FileSystem.uploadAsync(`${baseUrl}${endpoint}`, file.uri, {
+        httpMethod: "POST",
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        fieldName: "file",
+        mimeType: file.mimeType,
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+
+      let data: any = null;
+      try {
+        data = uploadResult.body ? JSON.parse(uploadResult.body) : null;
+      } catch {
+        data = null;
+      }
+
+      response =
+        uploadResult.status >= 200 && uploadResult.status < 300
+          ? { status: uploadResult.status, data }
+          : {
+              status: uploadResult.status,
+              data,
+              error: typeof data?.detail === "string" ? data.detail : undefined,
+            };
     }
 
     // Success response: 200 OK

@@ -96,6 +96,14 @@ def extract_pdf_page_texts(
 
     total_chars = sum(len(t) for t in page_texts)
     is_scanned = False
+    # `ocr_fn` returns None specifically when the OCR engine itself is
+    # unavailable or crashed (see StatementExtractionService._run_ocr) vs
+    # an empty string when it ran successfully but found no legible text —
+    # tracked so the final error below can tell a genuinely low-quality
+    # scan apart from "OCR isn't installed on this server," rather than
+    # blaming the document either way.
+    ocr_attempted_any_image = False
+    ocr_engine_unavailable = False
 
     # Phase 2: zero digital characters -> OCR embedded page images.
     if total_chars == 0:
@@ -106,8 +114,11 @@ def extract_pdf_page_texts(
                 for img_obj in getattr(page, "images", []):
                     img_bytes = getattr(img_obj, "data", b"")
                     if img_bytes:
+                        ocr_attempted_any_image = True
                         result = ocr_fn(img_bytes, "image/jpeg")
-                        if result and result.strip():
+                        if result is None:
+                            ocr_engine_unavailable = True
+                        elif result.strip():
                             parts.append(result.strip())
             except Exception as exc:
                 logger.warning("Error extracting page images on page %d: %s", idx + 1, exc)
@@ -120,6 +131,12 @@ def extract_pdf_page_texts(
             is_scanned = True
 
     if total_chars == 0:
+        if ocr_attempted_any_image and ocr_engine_unavailable:
+            raise PdfUnreadableError(
+                "This looks like a scanned statement, but the server's OCR engine "
+                "(Tesseract) isn't installed, so it can't be read. Try a text-based "
+                "export (downloaded directly from net-banking) instead."
+            )
         raise PdfUnreadableError(
             "Scanned document contains no readable text layer or text resolution too low."
         )

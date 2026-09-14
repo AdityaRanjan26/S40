@@ -217,9 +217,12 @@ def _parse_lines(page_texts: list[str]) -> list[ParsedRow]:
     return rows
 
 
-def parse_pdf_bytes(file_bytes: bytes, password: str | None, max_pages: int) -> tuple[list[ParsedRow], str]:
-    """Returns (rows, parse_method). CPU-bound, sync — always called via
-    app.core.concurrency.run_cpu_bound, never directly on the event loop.
+def parse_pdf_bytes(
+    file_bytes: bytes, password: str | None, max_pages: int
+) -> tuple[list[ParsedRow], str, str | None]:
+    """Returns (rows, parse_method, failure_detail). CPU-bound, sync —
+    always called via app.core.concurrency.run_cpu_bound, never directly
+    on the event loop.
 
     Tries structured table extraction first (pdfplumber); a password/
     corruption failure there is a hard error (StatementParseError) since
@@ -228,28 +231,55 @@ def parse_pdf_bytes(file_bytes: bytes, password: str | None, max_pages: int) -> 
     extraction (statement_extraction_service.py) plus the line-based
     parser above — a failure at THIS stage just means "nothing found,"
     same as finding zero table rows, not a hard error, since the file did
-    open successfully.
+    open successfully. `failure_detail` carries that stage's specific
+    reason (e.g. "OCR engine not installed") so the caller's user-facing
+    message doesn't have to fall back to one generic guess.
     """
+    # pdfplumber's default table-detection ("lines" strategy) requires
+    # visible ruling lines it can register as such — real bank-generated
+    # PDFs often draw grids with rules too thin/light to register, or with
+    # no rules at all (columns implied purely by text alignment), so the
+    # default strategy silently finds zero tables even on a clearly
+    # tabular, selectable-text page. Retrying with "text"-based strategies
+    # (infer rows/columns from text position/alignment instead of drawn
+    # lines) recovers those cases without changing behavior for PDFs the
+    # default strategy already handles (tried first, kept if it finds
+    # anything).
+    _TABLE_SETTINGS_ATTEMPTS = (
+        {},  # pdfplumber's default (line-based) strategy
+        {"vertical_strategy": "text", "horizontal_strategy": "text"},
+        {"vertical_strategy": "text", "horizontal_strategy": "lines"},
+    )
+
     try:
         with pdfplumber.open(BytesIO(file_bytes), password=password) as pdf:
             rows: list[ParsedRow] = []
             for page in pdf.pages[:max_pages]:
-                for table in page.extract_tables() or []:
-                    rows.extend(_parse_table(table))
+                for settings_kwargs in _TABLE_SETTINGS_ATTEMPTS:
+                    tables = page.extract_tables(settings_kwargs) or []
+                    page_rows: list[ParsedRow] = []
+                    for table in tables:
+                        page_rows.extend(_parse_table(table))
+                    if page_rows:
+                        rows.extend(page_rows)
+                        break  # this page is handled; don't also count a looser strategy's noise
     except Exception as exc:  # noqa: BLE001 - pdfplumber/pypdfium2 raise several distinct types for bad password/corrupt file
         raise StatementParseError(str(exc)) from exc
 
     if rows:
-        return rows, "table"
+        return rows, "table", None
 
     try:
         page_texts, _is_scanned = extract_pdf_page_texts(
             file_bytes, extraction_service.run_ocr_on_image, password=password
         )
-    except (PdfMalformedError, PdfPasswordProtectedError, PdfUnreadableError):
-        return [], "table"
+    except (PdfMalformedError, PdfPasswordProtectedError, PdfUnreadableError) as exc:
+        # The OCR-fallback path itself is what failed here, not the table
+        # path — "ocr_fallback" accurately reflects which stage produced
+        # the (empty) result.
+        return [], "ocr_fallback", str(exc)
 
-    return _parse_lines(page_texts[:max_pages]), "ocr_fallback"
+    return _parse_lines(page_texts[:max_pages]), "ocr_fallback", None
 
 
 def _dedup_hash(user_id: int, row: ParsedRow) -> str:
@@ -286,7 +316,7 @@ async def ingest_statement(
     file_bytes = None  # drop the original reference; buf is now the only copy we control
 
     try:
-        rows, parse_method = await run_cpu_bound(
+        rows, parse_method, failure_detail = await run_cpu_bound(
             parse_pdf_bytes, bytes(buf), password, settings.statement_upload_max_pages
         )
     finally:
@@ -352,7 +382,8 @@ async def ingest_statement(
         "message": (
             f"Parsed {len(rows)} transaction(s), {inserted} new. {baseline_note}".strip()
             if rows
-            else "No transactions could be read from this statement. Try a clearer scan or a text-based export."
+            else failure_detail
+            or "No transactions could be read from this statement. Try a clearer scan or a text-based export."
         ),
         "uploaded_at": now_iso,
         "created_at": now_iso,
