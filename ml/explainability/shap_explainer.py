@@ -18,6 +18,7 @@ from ml.explainability.explanations import (
     explain_feature,
     validate_explanation_map,
 )
+from ml.profiles.recurring_pattern import is_recurring_match
 
 
 def direction_of(feature: str) -> str:
@@ -182,15 +183,52 @@ class ExplainabilityEngine:
         voice_risk = _safe_f(sub_scores.get("voice_risk", 0.0))
         anomaly_score = _safe_f(sub_scores.get("behaviour_anomaly", 0.0))
 
+        # Recurring-payment recognition (ml/profiles/recurring_pattern.py):
+        # a transaction matching an established cadence+amount pattern for
+        # its recipient gets its own explanation instead of the usual
+        # amount-deviation/new-recipient risk bullets, which would
+        # otherwise misleadingly describe a routine, recognized payment as
+        # suspicious.
+        recurring_match = is_recurring_match(features)
+        cadence_type = str(features.get("periodicity_cadence_type", "NONE") or "NONE")
+
+        amount_flagged = avg_ratio >= 3.0 or zscore >= 2.5
+        recipient_flagged = recipient_novelty == 1.0
+
         # 1. Plain-Language Rule & Feature Maps
-        if avg_ratio >= 3.0 or zscore >= 2.5:
-
-            bullet_points.append(f"Transaction amount (₹{amount:,.0f}) is {avg_ratio:.1f}× higher than your usual average.")
+        if recurring_match:
+            # cadence_type is "NONE" when the match came from the
+            # confirmation fast-path (2+ confirmed payments, too few/too
+            # irregular to classify a weekly/biweekly/monthly cadence yet —
+            # see recurring_pattern.py::is_recurring_match) rather than a
+            # detected schedule; "recurring none payment" would misleadingly
+            # imply a cadence exists.
+            if cadence_type == "NONE":
+                bullet_points.append(
+                    "Recognized trusted recipient based on your previous confirmed payments."
+                )
+            else:
+                bullet_points.append(
+                    f"Recognized recurring {cadence_type.lower()} payment to a verified recipient."
+                )
+        elif amount_flagged and recipient_flagged:
+            # Both conditions fired together — the literal first-occurrence
+            # scenario ("a sudden ₹5,000 transfer to a new recipient")
+            # reads better as one combined sentence than two separate
+            # bullets saying almost the same thing.
+            bullet_points.append(
+                "Amount is significantly higher than your typical transactions and recipient is new."
+            )
             risk_factors.append("amount_deviation")
-
-        if recipient_novelty == 1.0:
-            bullet_points.append("Recipient account has never been used before.")
             risk_factors.append("new_recipient")
+        else:
+            if amount_flagged:
+                bullet_points.append(f"Transaction amount (₹{amount:,.0f}) is {avg_ratio:.1f}× higher than your usual average.")
+                risk_factors.append("amount_deviation")
+
+            if recipient_flagged:
+                bullet_points.append("Recipient account has never been used before.")
+                risk_factors.append("new_recipient")
 
         if new_device == 1.0:
             bullet_points.append("Payment initiated from an unrecognized device.")

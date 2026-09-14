@@ -54,6 +54,55 @@ class TestRiskFusionEngine(unittest.TestCase):
         res = self.fusion_engine.fuse_signals(features, sub_scores, [])
         self.assertIn("rule_risk", res["sub_scores"])
 
+    def test_recurring_match_bypasses_high_amount_override(self):
+        """A payment that matches an established recurring pattern for its
+        recipient (e.g. month-3 rent, 25x the user's GLOBAL average) must
+        not be force-floored to HIGH by the amount_vs_avg_ratio>=15 single-
+        signal override — see ml/inference/fusion.py's recurring_match gate."""
+        features = {
+            "amount_vs_avg_ratio": 20.0,  # would normally force >=78 alone
+            "new_device": 0,
+            "recipient_novelty": 0,
+            "is_known_periodic_recipient": 1.0,
+            "periodicity_cadence_type": "MONTHLY",
+            "periodicity_cadence_delta": 1.0,  # well within MONTHLY's tolerance
+            "amount_deviation_from_recurring_baseline": 0.02,  # well within 10%
+        }
+        sub_scores = {
+            "transaction_fraud": 0.10,
+            "behaviour_anomaly": 0.05,  # already-dampened value, as predict.py would produce
+            "device_risk": 0.10,
+            "voice_risk": 0.0,
+        }
+        res = self.fusion_engine.fuse_signals(features, sub_scores, [])
+        self.assertLess(res["risk_score"], 78)
+        self.assertNotEqual(res["risk_level"], "HIGH")
+
+    def test_amount_deviation_beyond_tolerance_still_floors_despite_periodic_flag(self):
+        """A spike to an otherwise-recurring recipient (e.g. 5x the usual
+        rent amount) must still trigger the HIGH override — matching a
+        recipient's cadence isn't enough if the AMOUNT itself deviates
+        beyond AMOUNT_TOLERANCE_PCT, since is_recurring_match() requires
+        both to hold."""
+        features = {
+            "amount_vs_avg_ratio": 20.0,
+            "new_device": 0,
+            "recipient_novelty": 0,
+            "is_known_periodic_recipient": 1.0,
+            "periodicity_cadence_type": "MONTHLY",
+            "periodicity_cadence_delta": 1.0,
+            "amount_deviation_from_recurring_baseline": 0.50,  # far beyond 10% tolerance
+        }
+        sub_scores = {
+            "transaction_fraud": 0.10,
+            "behaviour_anomaly": 0.05,
+            "device_risk": 0.10,
+            "voice_risk": 0.0,
+        }
+        res = self.fusion_engine.fuse_signals(features, sub_scores, [])
+        self.assertGreaterEqual(res["risk_score"], 78)
+        self.assertEqual(res["risk_level"], "HIGH")
+
 
 if __name__ == "__main__":
     unittest.main()

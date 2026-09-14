@@ -16,9 +16,10 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.security import hash_identifier
-from app.models.enums import GuardianOutcome
+from app.models.enums import GuardianOutcome, UserDecision
 from app.models.enums import TransactionStatus as S
 from app.models.transaction import Transaction
+from app.models.user_feedback import UserFeedback
 from app.repositories import guardian_repository, transaction_repository, user_pattern_repository
 from app.services import notification_service
 from app.services.exceptions import DomainError, TransactionNotFoundError
@@ -209,6 +210,29 @@ def confirm(db: Session, transaction_id: int, *, utr_reference: Optional[str] = 
         user_pattern_repository.increment_pending_transactions(db, txn.user_id)
     except Exception:
         pass
+
+    # Explicit "user confirmed this payment" signal for
+    # ml/profiles/recurring_pattern.py's confirmation fast path (an
+    # alternative to waiting for pure cadence detection to repeat
+    # naturally) — UserFeedback.transaction_id has a UNIQUE constraint, so
+    # this guards the same idempotent-repeat-confirmation case this
+    # function already handles above (txn.status == S.COMPLETED early
+    # return) without relying solely on that guard.
+    try:
+        existing_feedback = (
+            db.query(UserFeedback).filter(UserFeedback.transaction_id == txn.id).first()
+        )
+        if existing_feedback is None:
+            db.add(
+                UserFeedback(
+                    transaction_id=txn.id,
+                    user_decision=UserDecision.CONFIRM,
+                    feedback_type="user_confirmed_payment",
+                )
+            )
+            db.commit()
+    except Exception:
+        db.rollback()
 
     notification_service.notify(
         db,

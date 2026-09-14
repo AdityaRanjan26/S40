@@ -202,6 +202,47 @@ UNAVAILABLE_SPEC_FEATURES: tuple[UnavailableFeature, ...] = (
         "requires weights, which spec §12 says must be calibrated, not invented.",
         would_require="Calibration against validation data (Phase 6).",
     ),
+    # Recurring-payment cadence features (is_known_periodic_recipient,
+    # periodicity_cadence_delta, amount_deviation_from_recurring_baseline,
+    # historical_user_confirmations_for_recipient — see
+    # ml/profiles/recurring_pattern.py, ml/features/recipient_pattern_features.py)
+    # are deliberately NOT computed by this offline/training engine. They
+    # are wired only into the live inference path
+    # (app/services/risk_service.py -> ml/inference/predict.py), which
+    # fusion.py/shap_explainer.py already consume via
+    # ml.profiles.recurring_pattern.is_recurring_match(). Feeding them into
+    # BEHAVIOUR_COLUMNS and retraining the IsolationForest was considered
+    # and rejected: it would make cadence recognition an opaque, retrained
+    # weight instead of the interpretable rule this module's own docstring
+    # requires ("must NOT become a hidden second ML model").
+    UnavailableFeature(
+        name="is_known_periodic_recipient",
+        source="Recurring-payment cadence detection (see ml/profiles/recurring_pattern.py)",
+        reason="Requires a chronologically-ordered per-recipient transaction history "
+        "this offline engine's per-user UserRiskProfile doesn't track (it's "
+        "existence-only, not per-recipient-timestamped) — computed live instead.",
+        would_require="Per-(user, recipient) transaction history, not just per-user.",
+    ),
+    UnavailableFeature(
+        name="periodicity_cadence_delta",
+        source="Recurring-payment cadence detection",
+        reason="Depends on is_known_periodic_recipient's cluster detection.",
+        would_require="Per-(user, recipient) transaction history.",
+    ),
+    UnavailableFeature(
+        name="amount_deviation_from_recurring_baseline",
+        source="Recurring-payment cadence detection",
+        reason="Depends on is_known_periodic_recipient's cluster detection.",
+        would_require="Per-(user, recipient) transaction history.",
+    ),
+    UnavailableFeature(
+        name="historical_user_confirmations_for_recipient",
+        source="Recurring-payment cadence detection",
+        reason="Requires UserFeedback rows, which this offline engine's canonical "
+        "training data doesn't carry (no confirm/cancel/report signal in the "
+        "registered ML training datasets).",
+        would_require="A canonical dataset that records explicit user confirmations.",
+    ),
 )
 
 

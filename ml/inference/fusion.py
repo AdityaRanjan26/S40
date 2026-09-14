@@ -23,6 +23,8 @@ import json
 import math
 from typing import Dict, Any, List, Tuple
 
+from ml.profiles.recurring_pattern import is_recurring_match
+
 
 DEFAULT_FUSION_CONFIG = {
     "weights": {
@@ -40,14 +42,31 @@ DEFAULT_FUSION_CONFIG = {
             "rule_id": "NEW_DEVICE_HIGH_VALUE",
             "severity": "high",
             "score": 25,
-            "condition": lambda f: f.get("new_device", 0) == 1 and f.get("amount_vs_avg_ratio", 1.0) >= 3.0,
+            # Gated on `not is_recurring_match(f)`: an unrecognized device is
+            # still a real risk signal (device_risk, unaffected below) even
+            # for a confirmed recurring payment, but this RULE specifically
+            # combines it with the amount ratio — and amount_vs_avg_ratio is
+            # measured against the GLOBAL baseline, so a legitimate month-3
+            # rent payment would trip it every time without this gate.
+            "condition": lambda f: (
+                f.get("new_device", 0) == 1
+                and f.get("amount_vs_avg_ratio", 1.0) >= 3.0
+                and not is_recurring_match(f)
+            ),
             "explanation": "High-value payment initiated from an unrecognized device."
         },
         {
             "rule_id": "HIGH_AMOUNT_SPIKE",
             "severity": "high",
             "score": 35,
-            "condition": lambda f: f.get("amount_vs_avg_ratio", 1.0) >= 10.0 or f.get("amount_zscore", 0.0) >= 6.0,
+            # Same recurring-match gate as above — amount_vs_avg_ratio is
+            # the user's GLOBAL average, not this recipient's, so a
+            # recognized recurring payment must not trip this rule (a
+            # genuine spike still does, since is_recurring_match() itself
+            # requires the amount to match the recipient's own baseline).
+            "condition": lambda f: (
+                f.get("amount_vs_avg_ratio", 1.0) >= 10.0 or f.get("amount_zscore", 0.0) >= 6.0
+            ) and not is_recurring_match(f),
             "explanation": "Transaction amount is dramatically higher than habitual baseline (>10x average)."
         },
         {
@@ -142,6 +161,19 @@ class RiskFusionEngine:
         r_voice = sub_scores.get("voice_risk", 0.0)
         r_audio_spoof = sub_scores.get("audio_spoof", 0.0)
 
+        # Recurring-payment dampening (see ml/profiles/recurring_pattern.py):
+        # the XGBoost fraud model has no notion of "this specific
+        # recipient+cadence is normal for this user" — like s_anomaly (which
+        # predict.py already dampens before it reaches here), p_fraud is a
+        # "how unusual is this" signal computed with no awareness of a
+        # confirmed recurring pattern, so it gets the same treatment here.
+        # DAMPENING_FACTOR is a proposed placeholder, not tuned — matches
+        # predict.py's.
+        recurring_match = is_recurring_match(features)
+        if recurring_match:
+            DAMPENING_FACTOR = 0.15
+            p_fraud = p_fraud * DAMPENING_FACTOR
+
         # 1. Anti-Double-Counting Control:
         if features.get("new_device", 0) == 1 and r_device > 0.6:
             r_rule = r_rule * 0.75
@@ -164,14 +196,26 @@ class RiskFusionEngine:
         )
         fused_risk_float = 1.0 - combined_survival
 
-        # Single-signal override (spec §13): any high threat >= 0.70 forces at least HIGH tier
-        if (
-            r_voice >= 0.60
-            or p_fraud >= 0.75
-            or r_audio_spoof >= 0.65
-            or features.get("amount_vs_avg_ratio", 1.0) >= 15.0
-            or s_anomaly >= 0.85
-        ):
+        # Single-signal override (spec §13): any high threat >= 0.70 forces at least HIGH tier.
+        #
+        # The amount/anomaly legs are bypassed when this transaction matches
+        # an established recurring pattern for its recipient (see
+        # ml/profiles/recurring_pattern.py) — a recognized monthly rent
+        # payment can legitimately be 25-100x the user's GLOBAL average
+        # without being fraud, and dampening s_anomaly upstream (see
+        # predict.py) isn't enough on its own since amount_vs_avg_ratio is
+        # measured against that same global baseline, not this recipient's.
+        # Voice/audio-spoof are NOT bypassed: a recurring payment made under
+        # active coercion must still floor to HIGH regardless. p_fraud is
+        # already dampened above when recurring_match, so its own
+        # >=0.75 leg naturally stops firing for a genuine match without
+        # needing a second "and not recurring_match" gate here.
+        high_threat_signal = r_voice >= 0.60 or p_fraud >= 0.75 or r_audio_spoof >= 0.65
+        amount_or_anomaly_signal = (
+            features.get("amount_vs_avg_ratio", 1.0) >= 15.0 or s_anomaly >= 0.85
+        ) and not recurring_match
+
+        if high_threat_signal or amount_or_anomaly_signal:
             fused_risk_float = max(fused_risk_float, 0.78)
 
         # Calibrate to 0–100 integer

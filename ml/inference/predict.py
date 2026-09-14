@@ -34,9 +34,11 @@ from ml.explainability.shap_explainer import (
 )
 from ml.features.behaviour_features import BehaviourFeatureExtractor
 from ml.features.device_features import DeviceFeatureExtractor
+from ml.features.recipient_pattern_features import RecipientPatternFeatureExtractor
 from ml.features.transaction_features import TransactionFeatureExtractor
 from ml.features.voice_features import VoiceFeatureExtractor
 from ml.inference.fusion import RiskFusionEngine
+from ml.profiles.recurring_pattern import is_recurring_match
 from ml.registry.artifact import ARTIFACT_ROOT, ModelArtifact, ModelMetadata
 from ml.registry.model_registry import ModelRegistry, ModelStage
 
@@ -337,6 +339,7 @@ class MLPredictor:
         self.behaviour_extractor = BehaviourFeatureExtractor()
         self.device_extractor = DeviceFeatureExtractor()
         self.voice_extractor = VoiceFeatureExtractor()
+        self.pattern_extractor = RecipientPatternFeatureExtractor()
 
         # 2. Sub-Models & Scalers
         self.xgb_model = None
@@ -410,7 +413,8 @@ class MLPredictor:
             f_beh = self.behaviour_extractor.extract_features(transaction, user_profile)
             f_dev = self.device_extractor.extract_features(transaction, user_profile)
             f_voi = self.voice_extractor.extract_features(transaction, user_profile)
-            features = {**f_txn, **f_beh, **f_dev, **f_voi}
+            f_pat = self.pattern_extractor.extract_features(transaction, user_profile)
+            features = {**f_txn, **f_beh, **f_dev, **f_voi, **f_pat}
 
         def _to_float(val, default: float = 0.0) -> float:
             if val is None:
@@ -433,6 +437,19 @@ class MLPredictor:
         features["location_deviation"] = _to_float(features.get("location_deviation", features.get("location_anomaly_score", 0.0)), 0.0)
         features["user_transaction_count"] = _to_float(features.get("user_transaction_count", user_profile.get("user_transaction_count", 50.0)), 50.0)
         features["profile_is_cold"] = _to_float(features.get("profile_is_cold", user_profile.get("profile_is_cold", 0.0)), 0.0)
+
+        # Recurring-payment cadence features (ml/features/recipient_pattern_features.py) —
+        # normalized here too so the "features passed directly in payload"
+        # shortcut above still gets safe defaults, same as every other key.
+        features["is_known_periodic_recipient"] = _to_float(features.get("is_known_periodic_recipient", 0.0), 0.0)
+        features["periodicity_cadence_delta"] = _to_float(features.get("periodicity_cadence_delta", 0.0), 0.0)
+        features["amount_deviation_from_recurring_baseline"] = _to_float(
+            features.get("amount_deviation_from_recurring_baseline", 1.0), 1.0
+        )
+        features["historical_user_confirmations_for_recipient"] = _to_float(
+            features.get("historical_user_confirmations_for_recipient", 0.0), 0.0
+        )
+        features["periodicity_cadence_type"] = features.get("periodicity_cadence_type") or "NONE"
 
 
         # 2. Sub-Model Inferences
@@ -457,6 +474,18 @@ class MLPredictor:
             except Exception:
                 s_anomaly = 0.10
 
+        # Recurring-payment dampening: a transaction that genuinely matches
+        # an established cadence+amount pattern for this recipient (see
+        # ml/profiles/recurring_pattern.py) shouldn't keep tripping the
+        # anomaly score just because it deviates from the user's GLOBAL
+        # baseline. DAMPENING_FACTOR is a proposed placeholder, not tuned.
+        # This alone is not sufficient to keep the final score low — see
+        # fusion.py's matching bypass in its single-signal override, which
+        # is what actually stops amount_vs_avg_ratio from force-flooring a
+        # legitimately large recurring payment to HIGH.
+        if is_recurring_match(features):
+            DAMPENING_FACTOR = 0.15
+            s_anomaly = s_anomaly * DAMPENING_FACTOR
 
         # (c) Device Risk Score
         new_device = features.get("new_device", 0.0)

@@ -58,6 +58,30 @@ def list_transactions(
     return query.order_by(Transaction.timestamp.desc()).offset(offset).limit(limit).all()
 
 
+def get_transactions_for_recipient(
+    db: Session, user_id: int, recipient_id: int, limit: int = 24
+) -> list[Transaction]:
+    """Confirmed/completed transaction history for one (user, recipient)
+    pair, oldest first — feeds ml/profiles/recurring_pattern.py's cadence
+    detection (recipient_pattern_features.py). Same terminal-status
+    convention as get_confirmed_transactions: a PENDING/BLOCKED row was
+    never actually an example of this recipient's real payment cadence.
+    """
+    return (
+        db.query(Transaction)
+        .filter(
+            Transaction.user_id == user_id,
+            Transaction.recipient_id == recipient_id,
+            Transaction.status.in_(
+                [TransactionStatus.CONFIRMED, TransactionStatus.COMPLETED]
+            ),
+        )
+        .order_by(Transaction.timestamp.asc())
+        .limit(limit)
+        .all()
+    )
+
+
 def get_confirmed_transactions(db: Session, user_id: int) -> list[Transaction]:
     """Confirmed/completed transactions for one user — the live-history
     half of the personalized transaction-pattern baseline (see

@@ -27,6 +27,7 @@ from app.repositories import (
     device_repository,
     risk_repository,
     transaction_repository,
+    user_feedback_repository,
     user_pattern_repository,
 )
 from ml.inference.predict import get_predictor
@@ -195,12 +196,36 @@ def evaluate_prepayment(db: Session, payload: dict, device_id: Optional[str] = N
                     (float(profile.p90_amount) - float(profile.p50_amount)) / 1.2816, 100.0
                 )
 
+    # Real per-recipient payment history + explicit-confirmation count, for
+    # ml/profiles/recurring_pattern.py's cadence detection — lets a
+    # recognized recurring payment (e.g. monthly rent) score LOW instead of
+    # being flagged every time it deviates from the user's GLOBAL average.
+    recipient_db_id: Optional[int] = None
+    if user_id_int:
+        recipient_row = (
+            db.query(Recipient)
+            .filter(
+                Recipient.user_id == user_id_int,
+                Recipient.recipient_hash == hash_identifier(normalized_recipient),
+            )
+            .first()
+        )
+        if recipient_row is not None:
+            recipient_db_id = recipient_row.id
+            user_profile["recipient_history"] = transaction_repository.get_transactions_for_recipient(
+                db, user_id=user_id_int, recipient_id=recipient_db_id
+            )
+            user_profile["recipient_confirmations"] = user_feedback_repository.count_confirmations_for_recipient(
+                db, user_id=user_id_int, recipient_id=recipient_db_id
+            )
+
     predictor = get_predictor()
     inference_input = {
         "transaction": {
             "transaction_id": "PREPAYMENT_EVAL",
             "amount": amount,
             "recipient_id": normalized_recipient,
+            "recipient_db_id": recipient_db_id,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "device_id": hashed_device_id or "MOBILE_APP",
             "location": "",
@@ -271,12 +296,25 @@ def evaluate(db: Session, txn_id: Optional[int], raw_payload: Optional[dict] = N
     txn: Optional[Transaction] = transaction_repository.get_transaction(db, txn_id) if txn_id else None
 
     if txn:
-        user_risk_profile = txn.user.risk_profile if txn.user and txn.user.risk_profile else {}
+        user_risk_profile = dict(txn.user.risk_profile) if txn.user and txn.user.risk_profile else {}
+
+        # Same recurring-payment wiring as evaluate_prepayment (see that
+        # function's comment) — this is the path that actually creates
+        # Alerts and mutates transaction status, so it matters at least as
+        # much that a recognized recurring payment scores LOW here.
+        user_risk_profile["recipient_history"] = transaction_repository.get_transactions_for_recipient(
+            db, user_id=txn.user_id, recipient_id=txn.recipient_id
+        )
+        user_risk_profile["recipient_confirmations"] = user_feedback_repository.count_confirmations_for_recipient(
+            db, user_id=txn.user_id, recipient_id=txn.recipient_id
+        )
+
         inference_input = {
             "transaction": {
                 "transaction_id": str(txn.id),
                 "amount": float(txn.amount),
                 "recipient_id": str(txn.recipient_id),
+                "recipient_db_id": txn.recipient_id,
                 "timestamp": txn.timestamp.isoformat() if txn.timestamp else "",
                 "device_id": str(txn.device_id),
                 "location": txn.location or "",

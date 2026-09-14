@@ -44,6 +44,34 @@ def test_report_transaction_endpoint(client):
     assert txn["status"] == "REPORTED"
 
 
+def test_confirm_writes_user_feedback_confirm_row_once(client, db_session):
+    """payment_lifecycle_service.confirm() must write a UserFeedback(CONFIRM)
+    row on the first confirm (this is what makes
+    historical_user_confirmations_for_recipient / MIN_CONFIRMATIONS_FOR_TRUST
+    in ml/profiles/recurring_pattern.py actually live), and must NOT create a
+    second row on a repeat/idempotent confirm call."""
+    from app.models.enums import UserDecision
+    from app.models.user_feedback import UserFeedback
+
+    txn_id = _create_txn(client)
+
+    res1 = client.post(f"/api/v1/transactions/{txn_id}/confirm")
+    assert res1.status_code == 200
+    assert res1.json()["status"] == "COMPLETED"
+
+    feedback_rows = db_session.query(UserFeedback).filter(UserFeedback.transaction_id == txn_id).all()
+    assert len(feedback_rows) == 1
+    assert feedback_rows[0].user_decision == UserDecision.CONFIRM
+
+    # Repeat confirm on the already-COMPLETED transaction must not duplicate it.
+    res2 = client.post(f"/api/v1/transactions/{txn_id}/confirm")
+    assert res2.status_code == 200
+    assert res2.json()["duplicate"] is True
+
+    feedback_rows_after = db_session.query(UserFeedback).filter(UserFeedback.transaction_id == txn_id).all()
+    assert len(feedback_rows_after) == 1
+
+
 def test_cannot_confirm_or_cancel_already_confirmed_transaction(client):
     txn_id = _create_txn(client)
 
