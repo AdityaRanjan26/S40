@@ -1,3 +1,4 @@
+from app.core.security import create_access_token
 from app.models.enums import RiskLevel, TransactionStatus
 
 
@@ -19,8 +20,10 @@ def _setup_user_and_txn(client):
 
 def test_live_risk_evaluate_endpoint_scores_transaction(client):
     user_id, txn_id = _setup_user_and_txn(client)
+    token = create_access_token({"sub": str(user_id)})
+    headers = {"Authorization": f"Bearer {token}"}
 
-    response = client.post("/api/v1/risk/evaluate", json={"transaction_id": txn_id})
+    response = client.post("/api/v1/risk/evaluate", json={"transaction_id": txn_id}, headers=headers)
     assert response.status_code == 200
     body = response.json()
 

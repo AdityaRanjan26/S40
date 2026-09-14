@@ -14,6 +14,14 @@ def get_device(db: Session, *, user_id: int, device_hash: str) -> Optional[Devic
     )
 
 
+def list_device_hashes(db: Session, *, user_id: int) -> list[str]:
+    """All device_hash values this user has previously transacted from —
+    used by risk_service.py to populate the fraud model's `known_devices`
+    feature with the user's real device history instead of an empty list."""
+    rows = db.query(Device.device_hash).filter(Device.user_id == user_id).all()
+    return [r[0] for r in rows]
+
+
 def create_device(
     db: Session,
     *,

@@ -23,7 +23,12 @@ from app.models.enums import TransactionStatus as S
 from app.models.recipient import Recipient
 from app.models.transaction import Transaction
 from app.models.user import User
-from app.repositories import risk_repository, transaction_repository
+from app.repositories import (
+    device_repository,
+    risk_repository,
+    transaction_repository,
+    user_pattern_repository,
+)
 from ml.inference.predict import get_predictor
 
 logger = logging.getLogger(__name__)
@@ -112,7 +117,7 @@ def resolve_recipient_details(
     return None, "UNRESOLVED"
 
 
-def evaluate_prepayment(db: Session, payload: dict) -> dict:
+def evaluate_prepayment(db: Session, payload: dict, device_id: Optional[str] = None) -> dict:
     """Authoritative pre-payment evaluation endpoint logic.
 
     Evaluates a payment draft BEFORE transaction creation:
@@ -122,6 +127,16 @@ def evaluate_prepayment(db: Session, payload: dict) -> dict:
     4. Returns stage: EVALUATION_COMPLETED, risk score, risk level, decision, reasons.
     5. Purely advisory: guarantees NO transaction is created or mutated, NO alert is created,
        and NO guardian approval is triggered.
+
+    `device_id` is the caller's raw per-install identifier (the mobile
+    client's X-Device-Id header, already sent on every request — see
+    api-client.ts's getDevicePayload()). It's hashed the same way
+    transaction_service.create_transaction hashes a device identifier
+    before it's ever compared against this user's known device_hash rows,
+    so DeviceFeatureExtractor's `new_device` flag reflects whether this is
+    genuinely a device this user has transacted from before, instead of
+    being permanently stuck at "new" for every call (see device_features.py
+    docstring / the prior hardcoded "MOBILE_APP" placeholder this replaced).
     """
     recipient_raw = payload.get("recipient")
     normalized_recipient, rec_type = parse_and_validate_recipient(recipient_raw)
@@ -153,6 +168,33 @@ def evaluate_prepayment(db: Session, payload: dict) -> dict:
             frequent = list(frequent) + [normalized_recipient]
         user_profile["frequent_recipients"] = frequent
 
+    # Real per-user device history: same hash space transaction_service
+    # writes device_hash in, so DeviceFeatureExtractor's raw-equality
+    # `device_id in known_devices` check actually means something instead
+    # of always missing.
+    hashed_device_id = hash_identifier(device_id) if device_id else None
+    if user_id_int:
+        user_profile["known_devices"] = device_repository.list_device_hashes(db, user_id=user_id_int)
+
+    # Real trained spending baseline (statement_parser_service.py /
+    # user_pattern_trainer.py) instead of BehaviourFeatureExtractor's
+    # generic ₹1000/₹500 defaults — only overridden once this user has an
+    # actual trained percentile, so a genuinely cold-start user still gets
+    # the extractor's own sane defaults rather than a fabricated zero.
+    if user_id_int:
+        profile = user_pattern_repository.get_or_create_profile(db, user_id_int)
+        if profile.p50_amount is not None:
+            user_profile["normal_avg_amount"] = float(profile.p50_amount)
+            if profile.p90_amount is not None:
+                # p90 sits ~1.2816 standard deviations above the mean for a
+                # normal distribution — a standard, honest way to back out
+                # an implied std-dev from two percentiles when the raw
+                # per-transaction values aren't retained (see
+                # user_pattern_trainer.py; only percentiles are stored).
+                user_profile["normal_std_amount"] = max(
+                    (float(profile.p90_amount) - float(profile.p50_amount)) / 1.2816, 100.0
+                )
+
     predictor = get_predictor()
     inference_input = {
         "transaction": {
@@ -160,7 +202,7 @@ def evaluate_prepayment(db: Session, payload: dict) -> dict:
             "amount": amount,
             "recipient_id": normalized_recipient,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "device_id": "MOBILE_APP",
+            "device_id": hashed_device_id or "MOBILE_APP",
             "location": "",
             "voice_transcript": "",
             "note": payload.get("note") or "",

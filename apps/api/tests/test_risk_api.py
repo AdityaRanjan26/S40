@@ -1,3 +1,4 @@
+from app.core.security import create_access_token
 from app.models.enums import RiskDecision, RiskLevel
 from app.models.risk_factor import RiskFactor
 from app.models.risk_score import RiskScore
@@ -7,7 +8,7 @@ def _create_transaction(client):
     user_id = client.post(
         "/api/v1/users", json={"name": "Suresh Iyer", "phone_number": "+91-90000-77777"}
     ).json()["id"]
-    return client.post(
+    txn = client.post(
         "/api/v1/transactions",
         json={
             "user_id": user_id,
@@ -16,6 +17,8 @@ def _create_transaction(client):
             "amount": "8000.00",
         },
     ).json()
+    token = create_access_token({"sub": str(user_id)})
+    return txn, {"Authorization": f"Bearer {token}"}
 
 
 def test_risk_score_for_nonexistent_transaction_returns_404(client):
@@ -25,14 +28,14 @@ def test_risk_score_for_nonexistent_transaction_returns_404(client):
 
 
 def test_risk_score_before_evaluation_returns_404(client):
-    transaction = _create_transaction(client)
+    transaction, _headers = _create_transaction(client)
     response = client.get(f"/api/v1/risk/{transaction['id']}")
     assert response.status_code == 404
     assert "no risk evaluation" in response.json()["detail"].lower()
 
 
 def test_risk_score_after_manual_insertion_is_readable(client, db_session):
-    transaction = _create_transaction(client)
+    transaction, _headers = _create_transaction(client)
 
     risk_score = RiskScore(
         transaction_id=transaction["id"],
@@ -64,8 +67,10 @@ def test_risk_score_after_manual_insertion_is_readable(client, db_session):
 
 
 def test_evaluate_endpoint_scores_live_transaction(client):
-    transaction = _create_transaction(client)
-    response = client.post("/api/v1/risk/evaluate", json={"transaction_id": transaction["id"]})
+    transaction, headers = _create_transaction(client)
+    response = client.post(
+        "/api/v1/risk/evaluate", json={"transaction_id": transaction["id"]}, headers=headers
+    )
     assert response.status_code == 200
     body = response.json()
     assert "risk_score" in body

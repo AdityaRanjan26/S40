@@ -32,7 +32,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import hash_identifier, hash_password
+from app.core.security import create_access_token, hash_identifier, hash_password
 from app.main import app
 from app.models.audit_log import AuditLog
 from app.models.device import Device
@@ -357,7 +357,12 @@ def test_risk_evaluate_returns_evaluation_completed_stage(client: TestClient, te
     db_session.commit()
     db_session.refresh(txn)
 
-    res = client.post("/api/v1/risk/evaluate", json={"transaction_id": txn.id})
+    token = create_access_token({"sub": str(test_data["user"].id)})
+    res = client.post(
+        "/api/v1/risk/evaluate",
+        json={"transaction_id": txn.id},
+        headers={"Authorization": f"Bearer {token}"},
+    )
     assert res.status_code == 200
     data = res.json()
     assert data.get("stage") == PaymentWorkflowStage.EVALUATION_COMPLETED.value

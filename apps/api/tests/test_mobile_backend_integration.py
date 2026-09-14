@@ -7,6 +7,7 @@ Validates all API contracts called by mobile services (Auth, Transactions, Risk 
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.security import create_access_token
 from app.main import app
 
 client = TestClient(app)
@@ -85,7 +86,12 @@ def test_risk_evaluation_and_transaction_actions():
     tx_id = tx_res.json()["id"]
 
     # 3. Evaluate ML Risk
-    risk_res = client.post("/api/v1/risk/evaluate", json={"transaction_id": tx_id})
+    token = create_access_token({"sub": str(user_id)})
+    risk_res = client.post(
+        "/api/v1/risk/evaluate",
+        json={"transaction_id": tx_id},
+        headers={"Authorization": f"Bearer {token}"},
+    )
     assert risk_res.status_code == 200
     risk_data = risk_res.json()
     assert "risk_score" in risk_data

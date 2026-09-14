@@ -19,6 +19,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app.core.security import create_access_token
 from app.models.enums import TransactionStatus
 from app.models.guardian_request import GuardianRequest
 from app.models.transaction import Transaction
@@ -34,6 +35,7 @@ def _create_user(client: TestClient, name: str = "Persistence User", phone: str 
 def test_successful_card_persistence(client: TestClient, db_session: Session):
     """Card is persisted via POST /api/v1/payments/prepare with evaluation details."""
     user_id = _create_user(client, "Card User 1", "+91-98765-43210")
+    token = create_access_token({"sub": str(user_id)})
 
     # Step 1: Pre-payment evaluation
     eval_res = client.post(
@@ -44,6 +46,7 @@ def test_successful_card_persistence(client: TestClient, db_session: Session):
             "note": "Weekly vegetables",
             "user_id": user_id,
         },
+        headers={"Authorization": f"Bearer {token}"},
     )
     assert eval_res.status_code == 200
     eval_data = eval_res.json()
