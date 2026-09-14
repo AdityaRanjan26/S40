@@ -11,7 +11,7 @@ object DevConfig {
      * IP of the machine running the S40 backend(s). "127.0.0.1" (i.e. the
      * phone's own localhost) only works when the phone is USB-connected
      * with the matching ports forwarded via `adb reverse`:
-     *   adb reverse tcp:8000 tcp:8000
+     *   adb reverse tcp:8001 tcp:8001
      *   adb reverse tcp:8090 tcp:8090
      * This avoids guessing a WiFi LAN IP (which changes per network/hotspot
      * and silently breaks connectivity — see docs/ if you hit "unable to
@@ -21,8 +21,15 @@ object DevConfig {
      */
     const val DEV_MACHINE_IP: String = "127.0.0.1"
 
-    /** apps/api — the FastAPI transactions/risk/users/guardian backend. */
-    const val API_PORT: Int = 8000
+    /**
+     * apps/api — the FastAPI transactions/risk/users/guardian backend.
+     * 8001, not 8000: matches apps/mobile/.env's EXPO_PUBLIC_API_URL. Port
+     * 8000 was found this session to be occupied by a separate, stale dev
+     * server instance outside this app's control — 8001 is the one that's
+     * actually kept current. If you're running your own single backend on
+     * 8000, change both this and apps/mobile/.env together.
+     */
+    const val API_PORT: Int = 8001
 
     /**
      * main.py at the repo root — a SEPARATE standalone server (Bhashini

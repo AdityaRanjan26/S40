@@ -43,6 +43,29 @@
             android:textSize="14sp"
             android:gravity="center"/>
 
+        <TextView
+            android:id="@+id/overlay_signal_details"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textColor="#B71C1C"
+            android:textSize="13sp"
+            android:gravity="center"
+            android:visibility="gone"/>
+
+        <TextView
+            android:id="@+id/overlay_copilot_prompt"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:padding="10dp"
+            android:background="@drawable/overlay_card_background"
+            android:textColor="#212121"
+            android:textSize="13sp"
+            android:textStyle="italic"
+            android:gravity="center"
+            android:visibility="gone"/>
+
         <Button
             android:id="@+id/overlay_end_call_button"
             android:layout_width="match_parent"

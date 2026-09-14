@@ -43,9 +43,14 @@ import kotlin.concurrent.thread
  * free, no-API-key speech recognizer) transcribes speech during the call;
  * each utterance is sent as text to apps/api's real classifier
  * (`/ws/voice-stream`, already verified live) via [VoiceClassifierClient].
- * A HIGH/CRITICAL result triggers [FraudOverlayManager]. This exists
- * because the original raw-audio design below needs Bhashini credentials
- * that aren't configured — this is the working substitute.
+ * Concurrently, [startAudioSpoofCapture] runs a second [AudioRecord]
+ * session on the same mic and streams raw PCM chunks over the same socket,
+ * so the backend's audio anti-spoofing/multimodal-fusion/Adaptive-Copilot
+ * signals (previously only reachable from the in-app simulator, never a
+ * real call) get real audio to score. A HIGH/CRITICAL/synthetic-voice
+ * result triggers [FraudOverlayManager] with the full enriched response.
+ * This exists because the original raw-audio design below needs Bhashini
+ * credentials that aren't configured — this is the working substitute.
  *
  * Legacy path (kept, not currently invoked): [startRawAudioCapture] streams
  * raw 16kHz PCM to `main.py`'s `/ws/call-stream/{session_id}`
@@ -72,6 +77,10 @@ class LiveCallAudioService : Service() {
     private var classifierClient: VoiceClassifierClient? = null
     private val isDetecting = AtomicBoolean(false)
     private var detectionStartedAtMillis: Long = 0
+
+    private var spoofAudioRecord: AudioRecord? = null
+    private var spoofRecordingThread: Thread? = null
+    private val isCapturingSpoofAudio = AtomicBoolean(false)
 
     private val legacyPhoneStateListener = object : PhoneStateListener() {
         @Deprecated("Deprecated in Java")
@@ -184,10 +193,22 @@ class LiveCallAudioService : Service() {
             Log.i(
                 TAG,
                 "classification: risk=${classification.accumulatedRisk} level=${classification.coercionLevel} " +
-                    "scamAlert=${classification.isScamAlert}",
+                    "scamAlert=${classification.isScamAlert} fused=${classification.multimodalFusion?.fusedRiskScore} " +
+                    "spoof=${classification.audioSpoof?.isSyntheticVoice}",
             )
-            if (classification.isScamAlert || classification.coercionLevel == "CRITICAL") {
-                val riskScorePercent = (classification.accumulatedRisk * 100).toInt().coerceIn(0, 100)
+            // A synthetic/cloned voice is treated as its own trigger,
+            // independent of the text-only accumulator/coercion level —
+            // audio_spoof only starts reporting once real audio chunks are
+            // flowing (see startAudioSpoofCapture below), so this branch is
+            // silent until then, same as before this fix on a device where
+            // concurrent mic capture isn't available.
+            val spoofTriggered = classification.audioSpoof?.isSyntheticVoice == true
+            if (classification.isScamAlert || classification.coercionLevel == "CRITICAL" || spoofTriggered) {
+                // Prefer the fused multimodal score (text + audio-spoof) once
+                // available — it's the authoritative one voice_stream.py
+                // computes; the raw text-only accumulator is only a fallback
+                // for before the first audio chunk lands.
+                val riskScorePercent = classification.displayRiskPercent
                 val elapsedMs = System.currentTimeMillis() - detectionStartedAtMillis
 
                 // A single ambiguous line ("calling from SBI") can spike the
@@ -196,8 +217,12 @@ class LiveCallAudioService : Service() {
                 // warning can fire (the classifier itself keeps scoring the
                 // whole time, building real accumulated context) means the
                 // alert reflects a sustained pattern across the call, not
-                // one early, possibly-innocent line.
-                if (elapsedMs < MIN_LISTEN_BEFORE_ALERT_MS) {
+                // one early, possibly-innocent line. A synthetic-voice
+                // detection is a different kind of signal (an acoustic
+                // measurement, not an ambiguous keyword spike) and skips
+                // this gate — a cloned voice is worth flagging the moment
+                // it's detected, not after 35s of listening to it.
+                if (elapsedMs < MIN_LISTEN_BEFORE_ALERT_MS && !spoofTriggered) {
                     highestSuppressedRiskPercent = maxOf(highestSuppressedRiskPercent, riskScorePercent)
                     Log.i(
                         TAG,
@@ -215,7 +240,7 @@ class LiveCallAudioService : Service() {
                 // via a real crash: "Animators may only be run on Looper
                 // threads", not assumed upfront.
                 mainExecutor.execute {
-                    FraudOverlayManager.show(applicationContext, riskScorePercent, sessionId)
+                    FraudOverlayManager.show(applicationContext, riskScorePercent, sessionId, classification)
                 }
             }
         }
@@ -240,6 +265,7 @@ class LiveCallAudioService : Service() {
         }
         recognizer.start()
         speechRecognizer = recognizer
+        startAudioSpoofCapture(classifier)
         CallGuardModule.emit(
             CallGuardModule.EVENT_AUDIO_CAPTURE_STARTED,
             sessionId = sessionId
@@ -250,12 +276,121 @@ class LiveCallAudioService : Service() {
         if (!isDetecting.compareAndSet(true, false)) return
         speechRecognizer?.stop()
         speechRecognizer = null
+        stopAudioSpoofCapture()
         classifierClient?.close()
         classifierClient = null
         CallGuardModule.emit(
             CallGuardModule.EVENT_AUDIO_CAPTURE_STOPPED,
             sessionId = sessionId
         )
+    }
+
+    /**
+     * Feeds raw mic audio to [voice.anti_spoofing.detector.AudioSpoofDetector]
+     * (voice_stream.py's `audio_chunk_b64` path) alongside [OnDeviceSpeechRecognizer]'s
+     * transcription, over the SAME socket/session as the text classifier —
+     * this is what makes `audio_spoof`/synthetic-voice detection actually
+     * fire during a real call; before this, no caller of `/ws/voice-stream`
+     * ever sent an audio chunk for a live call, so the backend's spoof
+     * detector sat permanently at its silence-baseline default.
+     *
+     * Runs a second, independent [AudioRecord] session on [MediaRecorder.AudioSource.MIC]
+     * concurrently with [OnDeviceSpeechRecognizer]'s own internal mic session.
+     * Android does not guarantee two concurrent captures on the same source
+     * will both succeed on every device/OEM — this degrades gracefully
+     * (logs and gives up, same as [startRawAudioCapture]'s own error
+     * handling) rather than crashing if the second session can't acquire
+     * the mic; text-only classification keeps working unaffected either way.
+     */
+    private fun startAudioSpoofCapture(classifier: VoiceClassifierClient) {
+        if (!isCapturingSpoofAudio.compareAndSet(false, true)) return
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            isCapturingSpoofAudio.set(false)
+            return
+        }
+
+        val minBufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE_HZ, CHANNEL_CONFIG, AUDIO_FORMAT)
+        if (minBufferSize == AudioRecord.ERROR || minBufferSize == AudioRecord.ERROR_BAD_VALUE) {
+            Log.w(TAG, "audio-spoof capture: device does not support 16kHz mono PCM")
+            isCapturingSpoofAudio.set(false)
+            return
+        }
+
+        val record = try {
+            AudioRecord(
+                MediaRecorder.AudioSource.MIC,
+                SAMPLE_RATE_HZ,
+                CHANNEL_CONFIG,
+                AUDIO_FORMAT,
+                minBufferSize * 2,
+            )
+        } catch (e: SecurityException) {
+            Log.w(TAG, "audio-spoof capture: AudioRecord init failed: ${e.message}")
+            isCapturingSpoofAudio.set(false)
+            return
+        }
+
+        if (record.state != AudioRecord.STATE_INITIALIZED) {
+            // The expected outcome on a device/OEM where OnDeviceSpeechRecognizer
+            // already holds the mic exclusively — not treated as an error,
+            // just a graceful no-op. Text-only classification is unaffected.
+            Log.i(TAG, "audio-spoof capture: mic unavailable for a second concurrent session; skipping")
+            record.release()
+            isCapturingSpoofAudio.set(false)
+            return
+        }
+
+        spoofAudioRecord = record
+        try {
+            record.startRecording()
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "audio-spoof capture: startRecording failed: ${e.message}")
+            record.release()
+            spoofAudioRecord = null
+            isCapturingSpoofAudio.set(false)
+            return
+        }
+
+        spoofRecordingThread = thread(name = "s40-audio-spoof-capture") {
+            // ~1s of 16kHz mono 16-bit PCM per chunk — well above the
+            // detector's ~0.25s minimum and its ~0.8s preferred window for
+            // its spectral-consistency heuristic (see voice/anti_spoofing/
+            // detector.py), without introducing multi-second alert latency.
+            val chunkTargetBytes = SAMPLE_RATE_HZ * 2
+            val readBuffer = ByteArray(minBufferSize)
+            var accumulator = ByteArray(0)
+
+            while (isCapturingSpoofAudio.get()) {
+                val read = record.read(readBuffer, 0, readBuffer.size)
+                if (read > 0) {
+                    accumulator += if (read == readBuffer.size) readBuffer else readBuffer.copyOf(read)
+                    if (accumulator.size >= chunkTargetBytes) {
+                        classifier.sendAudioChunk(accumulator)
+                        accumulator = ByteArray(0)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun stopAudioSpoofCapture() {
+        if (!isCapturingSpoofAudio.compareAndSet(true, false)) return
+
+        spoofRecordingThread?.join(500)
+        spoofRecordingThread = null
+
+        spoofAudioRecord?.let {
+            try {
+                it.stop()
+            } catch (e: IllegalStateException) {
+                Log.w(TAG, "audio-spoof capture: stop() on non-recording instance: ${e.message}")
+            }
+            it.release()
+        }
+        spoofAudioRecord = null
     }
 
     // -------------------------------------------------------------------

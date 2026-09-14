@@ -16,6 +16,7 @@ import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
 import com.avaran.security.R
+import com.avaran.security.telemetry.VoiceClassification
 
 /**
  * Draws a [WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY] warning over whatever
@@ -37,7 +38,14 @@ object FraudOverlayManager {
     @Volatile
     private var currentOverlayView: View? = null
 
-    fun show(context: Context, riskScore: Int, sessionId: String) {
+    /**
+     * @param classification the full enriched response (fused risk score,
+     * audio-spoof signal, Adaptive Copilot guidance) when available from a
+     * real [com.avaran.security.telemetry.VoiceClassifierClient] callback —
+     * pass null only for callers that don't have one (e.g. a bare score from
+     * elsewhere), which falls back to the plain risk-score-only display.
+     */
+    fun show(context: Context, riskScore: Int, sessionId: String, classification: VoiceClassification? = null) {
         val appContext = context.applicationContext
 
         if (!canDrawOverlays(appContext)) {
@@ -64,6 +72,7 @@ object FraudOverlayManager {
         }
 
         view.findViewById<TextView>(R.id.overlay_risk_score).text = "Risk score: $riskScore / 100"
+        populateSignalDetails(view, classification)
 
         val dismissButton = view.findViewById<Button>(R.id.overlay_dismiss_button)
         val endCallButton = view.findViewById<Button>(R.id.overlay_end_call_button)
@@ -86,6 +95,34 @@ object FraudOverlayManager {
             currentOverlayView = view
         } catch (e: Exception) {
             Log.e(TAG, "failed to add overlay view: ${e.message}")
+        }
+    }
+
+    /**
+     * Surfaces the audio-spoof signal and Adaptive Copilot's suggested
+     * counter-question — both computed server-side (see voice_stream.py)
+     * but previously discarded entirely by the Kotlin client, so a real
+     * cloned-voice call and a text-only scam call looked identical to the
+     * user despite the backend telling them apart.
+     */
+    private fun populateSignalDetails(view: View, classification: VoiceClassification?) {
+        val detailsView = view.findViewById<TextView>(R.id.overlay_signal_details)
+        val promptView = view.findViewById<TextView>(R.id.overlay_copilot_prompt)
+
+        val spoof = classification?.audioSpoof
+        if (spoof?.isSyntheticVoice == true) {
+            detailsView.text = "⚠ Synthetic / cloned voice detected — this may not be who it sounds like."
+            detailsView.visibility = View.VISIBLE
+        } else {
+            detailsView.visibility = View.GONE
+        }
+
+        val challenge = classification?.copilot?.recommendedChallenge
+        if (!challenge.isNullOrBlank()) {
+            promptView.text = "Try asking: “$challenge”"
+            promptView.visibility = View.VISIBLE
+        } else {
+            promptView.visibility = View.GONE
         }
     }
 
