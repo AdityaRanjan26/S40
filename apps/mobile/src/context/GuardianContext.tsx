@@ -6,7 +6,7 @@ import React, {
   useCallback,
   useEffect,
 } from "react";
-import { Vibration } from "react-native";
+import { AppState, AppStateStatus, Vibration } from "react-native";
 import { TrustedContact, GuardianRequest, GuardianStatus } from "../types/guardian";
 import { GuardianService, GuardianRequestDto } from "../services/guardian-service";
 import { PaymentService, UserTransaction, isTransactionTerminal } from "../services/payment-service";
@@ -14,6 +14,7 @@ import { useAuth } from "./AuthContext";
 
 import { ApiClient, IS_DEMO_MODE, getApiBaseUrl } from "../services/api-client";
 import { UserPatternService } from "../services/user-pattern-service";
+import { syncDeviceCheck } from "../services/ml/local-device-risk";
 import { getRiskLevelFromScore } from "../utils/risk-scoring";
 
 // A 2-minute hold, matching the backend's real expiry (spec §6.3) — the UI
@@ -261,6 +262,25 @@ export const GuardianProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     if (!session?.userId) return;
     return UserPatternService.registerForegroundSync(session.userId);
+  }, [session?.userId]);
+
+  // Keeps the on-device device_risk signal (ml/local-device-risk.ts) fresh:
+  // "is this device already registered to me" only changes when a real
+  // transaction registers it server-side, so re-checking on every
+  // foreground (same trigger as the pattern engine above) is enough —
+  // payment-service.ts's evaluatePaymentLocal() only ever reads the cache,
+  // never blocks on this network call itself.
+  useEffect(() => {
+    if (!session?.userId) return;
+    let previous: AppStateStatus = AppState.currentState;
+    const subscription = AppState.addEventListener("change", (next: AppStateStatus) => {
+      if (previous !== "active" && next === "active") {
+        void syncDeviceCheck(session.userId);
+      }
+      previous = next;
+    });
+    void syncDeviceCheck(session.userId);
+    return () => subscription.remove();
   }, [session?.userId]);
 
   const addContact = useCallback(

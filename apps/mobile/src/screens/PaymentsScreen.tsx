@@ -1230,6 +1230,7 @@ export const PaymentsScreen: React.FC = () => {
                 isRequestingGuardian={guardianState.status === "REQUESTING_APPROVAL"}
                 onProceedToPayment={handleProceedToPayment}
                 isProceedingToPayment={isPersistingPayment}
+                isTrustedFeatureEnabled={isTrustedFeatureEnabled}
                 onEdit={() => {
                   setPreparedDraft(null);
                   setEvaluationState({ status: "IDLE" });
@@ -1930,17 +1931,27 @@ export const PaymentsScreen: React.FC = () => {
                         }}
                         activeOpacity={0.8}
                       >
-                        {/* Derive risk level before applying any colors so MEDIUM ≠ HIGH */}
+        {/* Derive risk level before applying any colors so MEDIUM ≠ HIGH.
+                            A "Blocked"/"Reported" transaction was stopped
+                            precisely because it was risky -- it must never
+                            render with the same green checkmark/"safe" badge
+                            styling as a genuinely completed payment, even
+                            though `isRisk` (which only means "still awaiting
+                            action") is false for it. */}
                         {(() => {
                           const itemLevel = item.riskLevel || getRiskLevelFromScore(item.riskScore ?? 0);
-                          const riskIconColor = isRisk
-                            ? (itemLevel === "HIGH" ? colors.threat : colors.caution)
+                          const isBlocked = item.status === "Blocked";
+                          const isReported = item.status === "Reported";
+                          const isStoppedForRisk = isRisk || isBlocked || isReported;
+
+                          const riskIconColor = isStoppedForRisk
+                            ? (isRisk && itemLevel !== "HIGH" ? colors.caution : colors.threat)
                             : colors.safe;
-                          const riskAmtColor = isRisk
-                            ? (itemLevel === "HIGH" ? colors.threat : colors.caution)
+                          const riskAmtColor = isStoppedForRisk
+                            ? (isRisk && itemLevel !== "HIGH" ? colors.caution : colors.threat)
                             : colors.textPrimary;
-                          const iconBoxStyle = isRisk
-                            ? (itemLevel === "HIGH" ? styles.txnIconBoxRisk : styles.txnIconBoxCaution)
+                          const iconBoxStyle = isStoppedForRisk
+                            ? (isRisk && itemLevel !== "HIGH" ? styles.txnIconBoxCaution : styles.txnIconBoxRisk)
                             : {};
 
                           return (
@@ -1954,7 +1965,7 @@ export const PaymentsScreen: React.FC = () => {
                                   ]}
                                 >
                                   <Ionicons
-                                    name={isRisk ? "warning" : "checkmark-circle"}
+                                    name={isRisk ? "warning" : isBlocked ? "close-circle" : isReported ? "flag" : "checkmark-circle"}
                                     size={18}
                                     color={riskIconColor}
                                   />
@@ -1982,17 +1993,19 @@ export const PaymentsScreen: React.FC = () => {
                                   label={
                                     isRisk
                                       ? `${itemLevel} RISK`
-                                      : item.status === "Reported"
+                                      : isReported
                                       ? "Reported"
-                                      : item.status === "Blocked"
+                                      : isBlocked
                                       ? "Blocked"
                                       : "Completed"
                                   }
                                   status={
                                     isRisk
                                       ? (itemLevel === "HIGH" ? "high" : itemLevel === "MEDIUM" ? "medium" : "low")
-                                      : item.status === "Reported"
+                                      : isReported
                                       ? "escalated"
+                                      : isBlocked
+                                      ? "high"
                                       : "low"
                                   }
                                   dot={false}

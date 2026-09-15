@@ -27,6 +27,7 @@ import { ServerEndpointModal } from "../components/profile/ServerEndpointModal";
 import { useAuth } from "../context/AuthContext";
 import { useBiometrics } from "../context/BiometricContext";
 import { useSecurity } from "../context/SecurityContext";
+import { useGuardian } from "../context/GuardianContext";
 import { ConnectedAppsService, ConnectedApp } from "../services/connected-apps-service";
 import { getApiBaseUrl } from "../services/api-client";
 import { getUserDevices, getDeviceName, getDeviceType, RegisteredDevice } from "../services/device-info-service";
@@ -122,6 +123,7 @@ export const ProfileScreen: React.FC = () => {
   const { session, updateProfile, logout } = useAuth();
   const { isBiometricsEnabled, setBiometricsEnabled, biometricStatus } = useBiometrics();
   const { alerts } = useSecurity();
+  const { isTrustedFeatureEnabled, toggleTrustedFeature } = useGuardian();
 
   const [alertsEnabled, setAlertsEnabled] = useState<boolean>(true);
   const [callProtectionEnabled, setCallProtectionEnabled] = useState<boolean>(true);
@@ -199,6 +201,15 @@ export const ProfileScreen: React.FC = () => {
     setCallProtectionEnabled(value);
     showToast(value ? "Call Protection activated" : "Call Protection deactivated", value ? "success" : "info");
   };
+  const handleTrustedFeatureToggle = (value: boolean) => {
+    toggleTrustedFeature();
+    showToast(
+      value
+        ? "Trusted Contact review activated. High-risk payments will require Guardian approval."
+        : "Trusted Contact review deactivated. High-risk payments can be continued by accepting the risk yourself.",
+      value ? "success" : "info"
+    );
+  };
   const handleSaveProfile = async (data: { name: string; phone: string; email: string }) => {
     const res = await updateProfile(data);
     if (res.success) { showToast("Profile updated successfully", "success"); return true; }
@@ -275,7 +286,19 @@ export const ProfileScreen: React.FC = () => {
           <View style={styles.card}>
             <ToggleRow icon="finger-print" label="Device Biometric Lock" sub={`${biometricStatus.displayName} · Hardware Enrolled`} value={isBiometricsEnabled} onValueChange={handleBiometricsToggle} />
             <ToggleRow icon="notifications-outline" label="Security Alerts" sub="Real-time notification on threats" value={alertsEnabled} onValueChange={handleAlertsToggle} />
-            <ToggleRow icon="mic-outline" label="Call Protection" sub="On-device acoustic fraud detection" value={callProtectionEnabled} onValueChange={handleCallProtectionToggle} isLast />
+            <ToggleRow icon="mic-outline" label="Call Protection" sub="On-device acoustic fraud detection" value={callProtectionEnabled} onValueChange={handleCallProtectionToggle} />
+            <ToggleRow
+              icon="people-outline"
+              label="Trusted Contact Review"
+              sub={
+                isTrustedFeatureEnabled
+                  ? "High-risk payments require Guardian approval"
+                  : "Off — you'll accept high-risk payments yourself"
+              }
+              value={isTrustedFeatureEnabled}
+              onValueChange={handleTrustedFeatureToggle}
+              isLast
+            />
           </View>
         </StaggerRevealCard>
 

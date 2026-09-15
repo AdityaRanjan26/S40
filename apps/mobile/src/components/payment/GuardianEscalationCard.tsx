@@ -23,6 +23,7 @@ interface GuardianEscalationCardProps {
   isRequesting?: boolean;
   onProceedToPayment?: () => void;
   isProceedingToPayment?: boolean;
+  isTrustedFeatureEnabled?: boolean;
 }
 
 export const GuardianEscalationCard: React.FC<GuardianEscalationCardProps> = ({
@@ -35,6 +36,7 @@ export const GuardianEscalationCard: React.FC<GuardianEscalationCardProps> = ({
   isRequesting = false,
   onProceedToPayment,
   isProceedingToPayment = false,
+  isTrustedFeatureEnabled = true,
 }) => {
   const { status, error, blockerNotice, remainingSeconds, requestId, resolutionNotes } =
     guardianState;
@@ -80,10 +82,12 @@ export const GuardianEscalationCard: React.FC<GuardianEscalationCardProps> = ({
           <Ionicons name="shield-half-outline" size={20} color={colors.threat} />
           <View style={{ flex: 1 }}>
             <Text style={[styles.headerBannerTitle, { color: colors.threat }]}>
-              GUARDIAN APPROVAL REQUIRED
+              {isTrustedFeatureEnabled ? "GUARDIAN APPROVAL REQUIRED" : "HIGH RISK PAYMENT"}
             </Text>
             <Text style={styles.headerBannerSubtitle}>
-              High risk evaluation score detected. Family Shield approval must be granted before payment authorization.
+              {isTrustedFeatureEnabled
+                ? "High risk evaluation score detected. Family Shield approval must be granted before payment authorization."
+                : "High risk evaluation score detected. Trusted Contact review is turned off in your Profile, so you must explicitly accept the risk to continue."}
             </Text>
           </View>
           <StatusBadge label="HIGH RISK GATE" status="high" dot={true} />
@@ -142,7 +146,9 @@ export const GuardianEscalationCard: React.FC<GuardianEscalationCardProps> = ({
         <View style={styles.boundaryNoticeBox} testID="guardian-boundary-notice">
           <Ionicons name="information-circle-outline" size={14} color={colors.textSecondary} />
           <Text style={styles.boundaryNoticeText}>
-            Guardian approval is required before payment authorization. No payment has been submitted or settled.
+            {isTrustedFeatureEnabled
+              ? "Guardian approval is required before payment authorization. No payment has been submitted or settled."
+              : "You are choosing to proceed without Trusted Contact review. No payment has been submitted or settled yet."}
           </Text>
         </View>
 
@@ -155,12 +161,23 @@ export const GuardianEscalationCard: React.FC<GuardianEscalationCardProps> = ({
             requires a real transaction_id). Once persisted, the
             already-working transaction-detail Guardian flow (useGuardian()'s
             initiateGuardianRequest + live polling) takes over correctly
-            instead of this dead-end pre-transaction request. */}
+            instead of this dead-end pre-transaction request. When the user
+            has disabled the Trusted feature in Profile (isTrustedFeatureEnabled
+            false), initiateGuardianRequest is a no-op anyway (see
+            GuardianContext.tsx), so this same button instead reads as an
+            explicit risk-acceptance action rather than implying a Guardian
+            review will happen. */}
         <View style={styles.actionsRow}>
           {onProceedToPayment ? (
             <Button
-              label={isProceedingToPayment ? "Preparing Payment..." : "PROCEED TO GUARDIAN REVIEW"}
-              icon="people"
+              label={
+                isProceedingToPayment
+                  ? "Preparing Payment..."
+                  : isTrustedFeatureEnabled
+                    ? "PROCEED TO GUARDIAN REVIEW"
+                    : "CONTINUE (ACCEPTING RISK)"
+              }
+              icon={isTrustedFeatureEnabled ? "people" : "warning"}
               variant="primary"
               size="sm"
               loading={isProceedingToPayment}

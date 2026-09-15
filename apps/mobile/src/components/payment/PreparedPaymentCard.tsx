@@ -24,6 +24,7 @@ interface PreparedPaymentCardProps {
   isRequestingGuardian?: boolean;
   onProceedToPayment?: () => void;
   isProceedingToPayment?: boolean;
+  isTrustedFeatureEnabled?: boolean;
 }
 
 export const PreparedPaymentCard: React.FC<PreparedPaymentCardProps> = ({
@@ -40,6 +41,7 @@ export const PreparedPaymentCard: React.FC<PreparedPaymentCardProps> = ({
   isRequestingGuardian = false,
   onProceedToPayment,
   isProceedingToPayment = false,
+  isTrustedFeatureEnabled = true,
 }) => {
   const getSourceLabel = (source: PreparedPaymentDraft["source"]) => {
     switch (source) {
@@ -268,6 +270,7 @@ export const PreparedPaymentCard: React.FC<PreparedPaymentCardProps> = ({
             isRequesting={isRequestingGuardian}
             onProceedToPayment={onProceedToPayment}
             isProceedingToPayment={isProceedingToPayment}
+            isTrustedFeatureEnabled={isTrustedFeatureEnabled}
           />
         </View>
       )}
