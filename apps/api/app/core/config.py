@@ -63,17 +63,31 @@ class Settings(BaseSettings):
 
     # Personalized transaction-pattern engine (app/services/
     # user_pattern_scheduler.py, user_pattern_trainer.py). Opportunistic
-    # sweep interval — kept long (30 min default) since retraining is
-    # demand-driven, not time-driven; this is just the backstop that
-    # eventually picks up eligible users between app opens. Disabled under
-    # the test harness for the same schema-teardown-race reason as the
-    # guardian worker above.
+    # sweep interval — this is the IDLE-queue backoff only (see that
+    # module's own scaling-design docstring for the adaptive/concurrent
+    # sweep this pairs with): when a sweep comes back empty, wait this
+    # long before checking again, since retraining is demand-driven, not
+    # time-driven, and there's no point polling an empty queue often.
+    # When a sweep IS full, the worker uses user_pattern_sweep_busy_pause_
+    # seconds instead — much shorter, so throughput tracks backlog size.
+    # Disabled under the test harness for the same schema-teardown-race
+    # reason as the guardian worker above.
     user_pattern_sweep_interval_seconds: int = 1800
+    # Brief pause between sweeps ONLY while the queue is staying full
+    # (i.e. there's real backlog) — see user_pattern_scheduler.py's
+    # scaling-design docstring for the throughput math this feeds.
+    user_pattern_sweep_busy_pause_seconds: int = 5
     enable_user_pattern_scheduler: bool = True
-    user_pattern_sweep_batch_size: int = 10
+    # How many eligible profiles one sweep fetches per DB round-trip and
+    # retrains CONCURRENTLY (bounded by TRAINING_SEMAPHORE, not by this
+    # number — see user_pattern_scheduler.py). Larger mainly reduces query
+    # overhead at scale; it does not by itself increase throughput once
+    # the semaphore is the real bottleneck.
+    user_pattern_sweep_batch_size: int = 50
     # Retraining eligibility gates (all three required) — see
     # user_pattern_trainer.py::is_eligible_for_retrain.
-    user_pattern_retrain_cooldown_hours: int = 72
+    # 84h = exactly twice a week (168h / 2) — the stated target cadence.
+    user_pattern_retrain_cooldown_hours: int = 84
     user_pattern_min_new_transactions: int = 15
     user_pattern_active_within_days: int = 14
     # Below this many total transactions (live + statement-derived), skip
@@ -102,6 +116,18 @@ class Settings(BaseSettings):
     # fallback this implies. Same dev-default caveat as the key above:
     #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     app_data_encryption_key: str = "mz-QjS8Q2QWIl2y4cF7HWcRTWbeGbt4HWGgvgKjjyFg="
+
+    # AES-256-GCM key (raw 32 bytes, base64) for /ws/voice-stream's audio
+    # chunks — the phone encrypts each PCM chunk with this key before
+    # sending (see VoiceClassifierClient.kt), the server decrypts it here
+    # before it ever reaches AudioSpoofDetector. A static pre-shared key,
+    # not a per-session negotiated one — a real production rollout should
+    # move to an ephemeral per-call key exchange (e.g. bound to the
+    # session's auth token) instead of a value checked into source; this is
+    # the honest, stated scope for now, same caveat as the two Fernet keys
+    # above. Generate a real one for anything beyond local dev:
+    #   python -c "import os, base64; print(base64.b64encode(os.urandom(32)).decode())"
+    voice_stream_audio_key_b64: str = "/AyplD9wkWaEe/2Mmr+SAQ3bbSV4FFyxFZoQc3G/q/w="
 
     # Authentication & JWT Configuration
     jwt_secret_key: str = "s40-dev-insecure-jwt-secret-key-change-in-production-1234567890"

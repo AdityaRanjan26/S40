@@ -89,6 +89,33 @@ def list_eligible_profiles(
     return eligible[:limit]
 
 
+def claim_profile_for_retrain(db: Session, *, user_id: int) -> bool:
+    """Atomically claims one profile for retraining: flips needs_retrain
+    True->False in a single UPDATE...WHERE, returning whether THIS caller
+    won the claim (rowcount == 1).
+
+    Exists so user_pattern_scheduler.py's sweep can safely run several
+    retrains concurrently (asyncio.gather over one sweep's whole batch,
+    bounded by TRAINING_SEMAPHORE) — and, at real scale, so multiple API
+    server processes/pods each running their own scheduler loop against
+    the same database never double-train the same user in the same
+    window. The UPDATE's row-level lock is the mutual-exclusion primitive
+    here, not anything in application code, so it holds across processes.
+    A lost race (rowcount == 0) is not an error — it means another worker
+    already has this profile; the sweep just skips it.
+    """
+    result = db.execute(
+        UserFinancialProfile.__table__.update()
+        .where(
+            UserFinancialProfile.user_id == user_id,
+            UserFinancialProfile.needs_retrain.is_(True),
+        )
+        .values(needs_retrain=False)
+    )
+    db.commit()
+    return result.rowcount == 1
+
+
 def get_statement_amounts_and_hours(
     db: Session, user_id: int
 ) -> tuple[list[float], list[int]]:

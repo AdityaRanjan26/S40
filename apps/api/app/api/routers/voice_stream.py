@@ -4,7 +4,6 @@ anti-spoofing (catches a synthetic/cloned voice of a known person), and
 multimodal coercion defense.
 """
 
-import base64
 import json
 import logging
 from typing import Dict, Any, Optional
@@ -15,6 +14,7 @@ from voice.leaky_bucket import LeakyBucketAccumulator
 from voice.anti_spoofing.detector import AudioSpoofDetector
 from ml.inference.multimodal_fusion import MultimodalBayesianFusionEngine
 from engine.copilot.adaptive_copilot import AdaptiveCopilot
+from app.core.audio_stream_crypto import decrypt_audio_chunk, AudioDecryptionError
 
 logger = logging.getLogger("voice_stream")
 router = APIRouter(tags=["voice"])
@@ -57,12 +57,18 @@ async def voice_stream_endpoint(websocket: WebSocket):
 
             sess = sessions[session_id]
 
-            # 1. Process Audio PCM Chunk if provided (Base64 encoded 16kHz PCM)
+            # 1. Process Audio PCM Chunk if provided (AES-256-GCM encrypted
+            # on-device, base64(nonce || ciphertext || tag) on the wire —
+            # see app/core/audio_stream_crypto.py and VoiceClassifierClient
+            # .kt's sendAudioChunk for the matching encrypt side. Raw
+            # microphone audio never appears in the clear on this socket.
             audio_chunk_b64 = packet.get("audio_chunk_b64") if isinstance(packet, dict) else None
             if audio_chunk_b64:
                 try:
-                    audio_bytes = base64.b64decode(audio_chunk_b64)
+                    audio_bytes = decrypt_audio_chunk(audio_chunk_b64)
                     sess["last_audio_res"] = sess["audio_detector"].detect_spoof(audio_bytes)
+                except AudioDecryptionError as e:
+                    logger.warning(f"Failed to decrypt audio chunk in session {session_id}: {e}")
                 except Exception as e:
                     logger.warning(f"Failed to process audio chunk in session {session_id}: {e}")
 

@@ -1,6 +1,5 @@
 package com.avaran.security.telemetry
 
-import android.util.Base64
 import android.util.Log
 import com.avaran.security.config.DevConfig
 import okhttp3.OkHttpClient
@@ -132,11 +131,23 @@ class VoiceClassifierClient(
      * (voice_stream.py's `audio_chunk_b64` field). At least ~0.25s of audio
      * per chunk (the detector's own minimum — shorter chunks are silently
      * ignored server-side); ~1s is the target, batched by the caller.
+     *
+     * The chunk is AES-256-GCM encrypted before it ever leaves the device
+     * (see [AudioStreamCrypto]) — raw microphone audio must never cross
+     * the wire in the clear. `audio_chunk_b64` carries the encrypted
+     * payload; the server decrypts it (app/core/audio_stream_crypto.py)
+     * before it reaches the spoof detector.
      */
     fun sendAudioChunk(pcm: ByteArray) {
         if (pcm.isEmpty()) return
+        val encryptedB64 = try {
+            AudioStreamCrypto.encrypt(pcm)
+        } catch (e: Exception) {
+            Log.w(TAG, "failed to encrypt audio chunk; dropping: ${e.message}")
+            return
+        }
         val payload = JSONObject().apply {
-            put("audio_chunk_b64", Base64.encodeToString(pcm, Base64.NO_WRAP))
+            put("audio_chunk_b64", encryptedB64)
         }
         val sent = socket?.send(payload.toString()) ?: false
         if (!sent) {

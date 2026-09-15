@@ -67,4 +67,14 @@ object DevConfig {
      * apps/mobile's voice-service.ts, which talks to this same endpoint).
      */
     fun voiceStreamWsUrl(): String = "$API_WS_BASE_URL/ws/voice-stream"
+
+    /**
+     * AES-256-GCM key (raw 32 bytes, base64) for encrypting audio chunks
+     * sent to /ws/voice-stream — MUST match apps/api's
+     * settings.voice_stream_audio_key_b64 exactly (see that setting's own
+     * docstring for the same "static pre-shared key, not per-session"
+     * caveat: a real production rollout would negotiate this per-session
+     * rather than check it into source on both ends).
+     */
+    const val VOICE_STREAM_AUDIO_KEY_B64: String = "/AyplD9wkWaEe/2Mmr+SAQ3bbSV4FFyxFZoQc3G/q/w="
 }

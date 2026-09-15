@@ -104,6 +104,45 @@ def get_user_devices(user_id: int, db: Session = Depends(get_db)) -> list:
     ]
 
 
+@router.get("/{user_id}/device-check")
+def check_device(
+    user_id: int,
+    device_identifier: str = Query(..., min_length=1),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Lets the on-device risk-fusion engine (local-device-risk.ts) know
+    whether ITS device is already registered to this user, and how many
+    devices this user has total — the two inputs DeviceFeatureExtractor's
+    `new_device`/`device_account_count` need — without ever exposing a raw
+    or full device_hash to the client (hash_identifier's pepper is a
+    server secret; the client hashes nothing itself, it just asks).
+
+    Advisory-only, same trust boundary as recipient-risk-service.ts: the
+    client caches this result locally and uses it to compute an on-device
+    device_risk signal, but the server's own risk_service.evaluate_prepayment
+    (which populates known_devices itself, server-side) remains the
+    authoritative source whenever reachable — see payment-service.ts's
+    evaluatePayment for how the two are reconciled.
+    """
+    if current_user.id != user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="You are not authorized to check this user's device registry.",
+        )
+
+    from app.core.security import hash_identifier
+    from app.repositories import device_repository
+
+    device_hash = hash_identifier(device_identifier)
+    known_hashes = device_repository.list_device_hashes(db, user_id=user_id)
+
+    return {
+        "known_device": device_hash in known_hashes,
+        "device_count": len(known_hashes),
+    }
+
+
 @router.get("/{user_id}/alerts", response_model=list[AlertRead])
 def get_user_alerts(
     user_id: int,
