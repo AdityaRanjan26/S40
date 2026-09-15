@@ -5,7 +5,8 @@
   "description": "S40 development orchestration helper (server.js). Not an application package — the frontend (apps/web) will get its own package.json when scaffolded.",
   "scripts": {
     "dev": "node server.js",
-    "dev:seed": "node server.js --seed"
+    "dev:seed": "node server.js --seed",
+    "dev:web": "npm --prefix apps/web run dev"
   },
   "engines": {
     "node": ">=18"
