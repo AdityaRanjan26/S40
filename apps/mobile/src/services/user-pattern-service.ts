@@ -163,6 +163,31 @@ export class UserPatternService {
     }
   }
 
+  /**
+   * Raw cached baseline (p50/p90/p99, shrunkMean/shrunkStd) synced from
+   * this user's REAL server-trained profile — built from their uploaded
+   * bank statement / accumulated confirmed transactions
+   * (user_pattern_trainer.py), not this device's own local cache. This is
+   * the on-device counterpart to risk_service.py's
+   * `user_profile["normal_avg_amount"/"normal_std_amount"]` wiring, and
+   * is what makes a first-ever local payment personalized instead of
+   * scored against a generic default — see local-fusion-engine.ts's
+   * caller for exactly how it's used. Returns null if nothing has ever
+   * synced for this user (brand new account, statement not yet uploaded).
+   */
+  static async getCachedBaseline(
+    userId: number
+  ): Promise<{ p50: number; p90: number; shrunkMean: number; shrunkStd: number } | null> {
+    const cached = await readCache(userId);
+    if (!cached || (cached.p50 <= 0 && cached.shrunkMean <= 0)) return null;
+    return {
+      p50: cached.p50,
+      p90: cached.p90,
+      shrunkMean: cached.shrunkMean,
+      shrunkStd: cached.shrunkStd,
+    };
+  }
+
   /** Best-effort, offline-safe local estimate for `amount`. Returns null
    * if nothing has ever synced, or on any failure — callers must treat
    * this as optional, never required (same contract as

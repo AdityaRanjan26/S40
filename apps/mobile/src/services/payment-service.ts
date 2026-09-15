@@ -32,6 +32,15 @@ import {
 import { buildRiskEvaluationPayload } from "./risk-service";
 import type { LocalRiskEstimate } from "./recipient-risk-service";
 import type { LocalAnomalyEstimate } from "./behaviour-anomaly-service";
+import { fuseSignals, FusionFeatures, FusionSubScores, FUSION_WEIGHTS } from "./ml/local-fusion-engine";
+import { estimateDeviceRiskLocally } from "./ml/local-device-risk";
+import { UserPatternService } from "./user-pattern-service";
+import {
+  detectRecurringPattern,
+  isRecurringMatch,
+  getLocalConfirmationCount,
+  recordLocalConfirmation,
+} from "./ml/local-recurring-pattern";
 import {
   parseUpiPaymentPayload,
   ParsedUpiPaymentData,
@@ -765,6 +774,24 @@ class CentralPaymentManager {
       return this.evaluatePaymentOffline(request);
     }
 
+    // On-device is the DEFAULT, authoritative result — not a fallback
+    // that only kicks in when the server is unreachable. The on-device
+    // fusion engine (ml/local-fusion-engine.ts, a faithful port of
+    // ml/inference/fusion.py) always runs, connection or no connection,
+    // and its result is what gets returned in the normal case. The
+    // server call below still runs whenever reachable (it's still useful:
+    // it sees data the phone structurally can't — cross-device recipient
+    // history, confirmation counts, the server's calibrated fraud model —
+    // and it's how a real Transaction/RiskScore row ends up persisted for
+    // Guardian eligibility and training data), and it ESCALATES the
+    // result only when it finds something STRICTLY MORE severe than the
+    // on-device verdict. It never downgrades or silently replaces an
+    // on-device result of equal or higher severity — the phone's own
+    // computation is the one the user sees unless the server has a
+    // stronger reason to override it. See evaluatePaymentLocal()'s own
+    // docstring for exactly what runs where.
+    const localResult = await this.evaluatePaymentLocal(request);
+
     try {
       const res = await ApiClient.post<any>("/api/v1/risk/evaluate", {
         recipient: recipient.trim(),
@@ -777,13 +804,10 @@ class CentralPaymentManager {
       });
 
       if (res.error && (!res.data || res.status >= 400)) {
-        if (res.isNetworkError && isDemoMode()) {
-          return this.evaluatePaymentOffline(request);
-        }
-        return {
-          success: false,
-          error: res.error,
-        };
+        // Server unreachable/erroring: the local, on-device result already
+        // computed above IS the answer — not a fallback bolted on after
+        // failure, the primary path degrading gracefully to itself.
+        return localResult.success ? localResult : { success: false, error: res.error };
       }
 
       if (res.data) {
@@ -794,7 +818,7 @@ class CentralPaymentManager {
             ? d.risk_level
             : getRiskLevelFromScore(score);
 
-        return {
+        const serverResult: PaymentEvaluationResult = {
           success: true,
           data: {
             evaluation_id: d.evaluation_id,
@@ -821,24 +845,249 @@ class CentralPaymentManager {
             isSubmitted: false,
           },
         };
+
+        // On-device is the default — see the trust-boundary comment
+        // above. The server result replaces it ONLY when it is strictly
+        // more severe (a genuine escalation, using data the phone
+        // couldn't see); equal or lower severity from the server never
+        // overrides the on-device computation.
+        if (
+          localResult.success &&
+          serverResult.success &&
+          serverResult.data.risk_score > localResult.data.risk_score
+        ) {
+          return serverResult;
+        }
+        return localResult.success ? localResult : serverResult;
       }
 
-      if (res.isNetworkError && isDemoMode()) {
-        return this.evaluatePaymentOffline(request);
-      }
-
-      return {
-        success: false,
-        error: res.error || "Server returned an empty evaluation response.",
-      };
+      return localResult.success ? localResult : { success: false, error: res.error || "Server returned an empty evaluation response." };
     } catch (err: any) {
-      if (isDemoMode()) {
-        return this.evaluatePaymentOffline(request);
-      }
+      // Network/unexpected failure reaching the server: the on-device
+      // result already computed is the real, usable answer.
+      if (localResult.success) return localResult;
       const detail = err?.response?.data?.detail || err?.message || "Failed to evaluate payment draft";
       return {
         success: false,
         error: typeof detail === "string" ? detail : JSON.stringify(detail),
+      };
+    }
+  }
+
+  /**
+   * Computes a real fused risk decision entirely on-device: the actual
+   * ml/inference/fusion.py formula/weights/rule-table (ported in
+   * ml/local-fusion-engine.ts), fed by the on-device recipient-fraud ONNX
+   * model, the on-device IsolationForest anomaly port, an on-device
+   * device_risk heuristic (backed by a cached, privacy-safe device-check
+   * sync — see local-device-risk.ts), and an on-device recurring-payment
+   * cadence detector (local-recurring-pattern.ts). No network call is made
+   * here — this is the fully-offline-capable primary path; see
+   * evaluatePayment() for how it's reconciled with the server's own
+   * evaluation when reachable.
+   *
+   * Approximations, stated plainly (same category already documented in
+   * recipient-risk-service.ts / behaviour-anomaly-service.ts): all history
+   * comes from THIS device's local transaction cache, not the server's
+   * full cross-device ledger; device-check/confirmation counts are cached
+   * and may be stale if this device hasn't synced recently; there is no
+   * location signal at all (impossible-travel always reads as 0, matching
+   * what the server itself does when that signal is unavailable).
+   */
+  public async evaluatePaymentLocal(request: PaymentEvaluationRequest): Promise<PaymentEvaluationResult> {
+    try {
+      const raw = request.recipient.trim();
+      const isUpi = raw.includes("@");
+      const normalizedRecipient = isUpi
+        ? raw.toLowerCase()
+        : raw.replace(/[\s\-\(\)]/g, "").replace(/^(\+91|91)/, "");
+
+      const now = new Date();
+      const nowMs = now.getTime();
+
+      const historyForRecipient = this.transactions
+        .filter((t) => t.merchant === normalizedRecipient)
+        .filter((t) => new Date(t.timestamp).getTime() < nowMs);
+
+      const [fraudEstimate, deviceEstimate, localConfirmations] = await Promise.all([
+        (async (): Promise<LocalRiskEstimate | null> => {
+          try {
+            const { RecipientRiskService } = require("./recipient-risk-service");
+            return await RecipientRiskService.estimateLocally(request.amount, normalizedRecipient, this.transactions);
+          } catch {
+            return null;
+          }
+        })(),
+        request.user_id ? estimateDeviceRiskLocally(request.user_id) : Promise.resolve(null),
+        getLocalConfirmationCount(normalizedRecipient),
+      ]);
+
+      let anomalyEstimate: LocalAnomalyEstimate | null = null;
+      try {
+        const { estimateBehaviourAnomalyLocally } = require("./behaviour-anomaly-service");
+        anomalyEstimate = estimateBehaviourAnomalyLocally(request.amount, normalizedRecipient, this.transactions);
+      } catch {
+        anomalyEstimate = null;
+      }
+
+      // Same local amount stats behaviour-anomaly-service.ts computes
+      // internally, needed again here for the rule engine/fusion features
+      // (that module only exposes the final anomaly score, not the raw
+      // inputs) — kept in sync with its MIN_HISTORY=5 / formula.
+      const amounts = historyForRecipient.map((t) => t.amount);
+      const MIN_HISTORY = 5;
+      let amountVsAvgRatio = 1;
+      let amountZscore = 0;
+      let personalBaselineSource: "recipient-history" | "statement-trained" | "none" = "none";
+
+      if (amounts.length >= MIN_HISTORY) {
+        const mean = amounts.reduce((a, b) => a + b, 0) / amounts.length;
+        const variance = amounts.reduce((a, b) => a + (b - mean) ** 2, 0) / amounts.length;
+        const std = Math.sqrt(variance);
+        amountVsAvgRatio = mean > 1e-9 ? request.amount / mean : 1;
+        amountZscore = std > 1e-9 ? (request.amount - mean) / std : 0;
+        personalBaselineSource = "recipient-history";
+      } else if (request.user_id) {
+        // Not enough history with THIS specific recipient yet (the common
+        // case: a first-ever payment to someone new) — fall back to the
+        // user's own REAL server-trained baseline from their uploaded
+        // statement / accumulated confirmed transactions
+        // (user_pattern_trainer.py, synced via UserPatternService), the
+        // same signal risk_service.py's evaluate_prepayment uses
+        // server-side. Without this, a first payment to a new recipient
+        // had NOTHING personalized to compare against except a neutral
+        // ratio=1/zscore=0 default — meaning two totally different
+        // spenders (a student vs. a salaried parent) would score
+        // identically on amount alone, which is exactly the genericness
+        // this on-device path must not have.
+        try {
+          const baseline = await UserPatternService.getCachedBaseline(request.user_id);
+          if (baseline) {
+            const mean = baseline.shrunkMean > 0 ? baseline.shrunkMean : baseline.p50;
+            const std = baseline.shrunkStd > 0 ? baseline.shrunkStd : Math.max(mean * 0.5, 100);
+            if (mean > 1e-9) {
+              amountVsAvgRatio = request.amount / mean;
+              amountZscore = std > 1e-9 ? (request.amount - mean) / std : 0;
+              personalBaselineSource = "statement-trained";
+            }
+          }
+        } catch {
+          // No synced baseline yet (statement never uploaded) — the
+          // neutral default above is the honest fallback, not a bug.
+        }
+      }
+      const velocity10m = historyForRecipient.filter(
+        (t) => (nowMs - new Date(t.timestamp).getTime()) / 1000 <= 600
+      ).length;
+      const velocity24h = historyForRecipient.filter(
+        (t) => (nowMs - new Date(t.timestamp).getTime()) / 1000 <= 86400
+      ).length;
+      const velocityRatio10m24h = velocity24h > 0 ? velocity10m / velocity24h : 0;
+
+      const mostRecentAny = [...this.transactions]
+        .map((t) => new Date(t.timestamp).getTime())
+        .filter((ts) => ts < nowMs)
+        .sort((a, b) => b - a)[0];
+      const rapidSuccessiveTransfer =
+        mostRecentAny !== undefined && (nowMs - mostRecentAny) / 1000 <= 60;
+
+      const cluster = historyForRecipient.length > 0 || localConfirmations > 0
+        ? detectRecurringPattern(historyForRecipient, localConfirmations)
+        : null;
+
+      const features: FusionFeatures = {
+        amountVsAvgRatio,
+        amountZscore,
+        newDevice: deviceEstimate?.newDevice ?? false,
+        velocity10m,
+        velocityRatio10m24h,
+        rapidSuccessiveTransfer,
+        isKnownPeriodicRecipient: cluster?.isEstablished ?? false,
+        amountDeviationFromRecurringBaseline:
+          cluster?.clusterMeanAmount ? Math.abs(request.amount - cluster.clusterMeanAmount) / cluster.clusterMeanAmount : 1,
+      };
+
+      // Same recurring-payment dampening predict.py applies to s_anomaly
+      // BEFORE it reaches the fusion engine's sub_scores (fuse_signals
+      // itself dampens p_fraud internally, given the cluster).
+      const recurringMatchForAnomaly = cluster ? isRecurringMatch(cluster, request.amount, nowMs) : false;
+      let behaviourAnomaly = anomalyEstimate?.anomalyScore ?? 0;
+      if (recurringMatchForAnomaly) behaviourAnomaly *= 0.15;
+
+      // recipient-risk-service.ts's fraudProbabilityRaw is the RAW,
+      // UNCALIBRATED output of a generic (non-personalized) cross-user
+      // model (ECE 0.124 vs 0.0044 calibrated — see
+      // docs/FRAUD_MODEL_CARD_REAL.md and that module's own "SCALE
+      // WARNING"/"must never gate, block, or silently substitute for the
+      // real risk call" doctrine). Comparing it numerically against the
+      // fusion engine's pFraud>=0.75 single-signal override (calibrated
+      // by design, matching the server's calibrated model) lets model
+      // noise alone force an innocuous small payment to HIGH. Only its
+      // documented "elevated vs not" boolean is used here, capped well
+      // under the override threshold (0.25 * 2.5 = 0.625 < 0.75) so it
+      // can still nudge the weighted score but can never alone floor a
+      // decision to HIGH the way a genuinely personalized signal can.
+      const subScores: FusionSubScores = {
+        transactionFraud: fraudEstimate?.elevated ? 0.25 : 0,
+        behaviourAnomaly,
+        deviceRisk: deviceEstimate?.deviceRisk ?? 0.1,
+      };
+
+      const result = fuseSignals(features, subScores, cluster, request.amount, nowMs);
+
+      const reasons: string[] = result.activeRules.map((r) => r.explanation);
+      if (result.recurringMatch) {
+        reasons.unshift("Recognized recurring payment to a verified recipient (on-device).");
+      }
+      if (features.newDevice) {
+        reasons.push("Payment initiated from an unrecognized device (on-device check).");
+      }
+      if (reasons.length === 0) {
+        reasons.push("On-device risk fusion found no elevated signal.");
+      }
+      if (personalBaselineSource === "statement-trained") {
+        reasons.push("Compared against your own trained spending baseline (from your uploaded statement).");
+      } else if (personalBaselineSource === "none") {
+        reasons.push("No personalized spending baseline yet — upload a bank statement for more accurate on-device scoring.");
+      }
+
+      const riskFactors = result.activeRules.map((r) => r.ruleId.toLowerCase());
+      const riskContributionsPct: Record<string, number> = {
+        "Transaction Fraud Model": Math.round(FUSION_WEIGHTS.transactionFraud * subScores.transactionFraud * 100) || 0,
+        "Behaviour Anomaly": Math.round(FUSION_WEIGHTS.behaviourAnomaly * subScores.behaviourAnomaly * 100) || 0,
+        "Device Integrity": Math.round(FUSION_WEIGHTS.deviceRisk * subScores.deviceRisk * 100) || 0,
+        "Rule Engine": Math.round(result.subScores.rule_risk * 100) || 0,
+      };
+
+      return {
+        success: true,
+        data: {
+          evaluation_id: `LOCAL-${Date.now().toString(16)}`,
+          stage: "EVALUATION_COMPLETED",
+          risk_score: result.riskScore,
+          risk_level: result.riskLevel,
+          decision: result.decision,
+          plain_language_reasons: reasons,
+          risk_factors: riskFactors,
+          risk_contributions_pct: riskContributionsPct,
+          sub_scores: result.subScores,
+          amount: request.amount,
+          note: request.note,
+          qr_data: request.qr_data,
+          timestamp: now.toISOString(),
+          guardian_required: result.riskLevel === "HIGH",
+          disclaimer:
+            "On-device advisory evaluation. Cross-checked against the server whenever reachable — see AVARAN's risk architecture.",
+          isAuthorized: false,
+          isApproved: false,
+          isCompleted: false,
+          isSubmitted: false,
+        },
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        error: err?.message || "On-device risk evaluation failed.",
       };
     }
   }
@@ -1349,6 +1598,14 @@ class CentralPaymentManager {
 
       if (found) {
         AlertService.resolveAlertForTransaction(transactionId);
+        // Local counterpart to payment_lifecycle_service.py::confirm()'s
+        // UserFeedback(CONFIRM) write — feeds local-recurring-pattern.ts's
+        // confirmation fast-path so on-device evaluation recognizes a
+        // recurring recipient even before the server's own confirmation
+        // count has been fetched. Best-effort, never blocks completion.
+        if (targetTx.merchant) {
+          recordLocalConfirmation(targetTx.merchant).catch(() => {});
+        }
         this.notify();
       }
       return { success: found };
